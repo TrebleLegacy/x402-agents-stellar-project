@@ -1,17 +1,20 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Zap, Menu, X } from 'lucide-react';
+import { Zap, Menu, X, Sparkles } from 'lucide-react';
 import AgentConfigForm from '@/components/AgentConfigForm';
 import AgentChat from '@/components/AgentChat';
 import AgentNetwork from '@/components/AgentNetwork';
-import SpecialistAgents from '@/components/SpecialistAgents';
+import SpecialistNetwork from '@/components/SpecialistNetwork';
+import PreMadeAgents from '@/components/PreMadeAgents';
+import WalletInfo from '@/components/WalletInfo';
 import { AgentConfig as AgentConfigType, AgentQueryResponse } from '@/types/agent';
 import { AgentAPIClient } from '@/lib/api';
 import { SpecialistAgent } from '@/types/agents';
 
 export default function Home() {
   const [view, setView] = useState<'config' | 'chat'>('config');
+  const [showPreMadeAgents, setShowPreMadeAgents] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
   const [sessionId, setSessionId] = useState('');
@@ -96,6 +99,13 @@ export default function Home() {
             <span className="text-xs text-slate-500 ml-2">x402 Agent Network</span>
           </div>
           <button
+            onClick={() => setShowPreMadeAgents(!showPreMadeAgents)}
+            className="hidden md:flex items-center gap-2 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg transition-colors border border-emerald-500/30"
+          >
+            <Sparkles className="w-4 h-4" />
+            Quick Agents
+          </button>
+          <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="md:hidden p-2 hover:bg-slate-800 rounded-lg transition-colors"
           >
@@ -112,24 +122,58 @@ export default function Home() {
         <div
           className={`${
             mobileMenuOpen ? 'flex' : 'hidden'
-          } md:flex flex-col w-full md:w-96 border-r border-slate-800`}
+          } md:flex flex-col w-full md:w-96 border-r border-slate-800 overflow-y-auto`}
         >
           {view === 'config' ? (
-            <AgentConfigForm onConfigSubmit={handleConfigSubmit} isLoading={isLoading} />
+            <AgentConfigForm
+              onConfigSubmit={handleConfigSubmit}
+              isLoading={isLoading}
+              onKeypairChange={setKeypair}
+            />
           ) : (
-            <div className="flex flex-col h-full p-6">
-              <div className="mb-6">
-                <h2 className="text-lg font-semibold text-white mb-2">
-                  {agentConfig?.name}
+            <div className="flex flex-col h-full p-6 space-y-6">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                  Configuration
                 </h2>
-                <p className="text-sm text-slate-400">Session: {sessionId.slice(0, 12)}...</p>
+                <div className="space-y-2 mb-4">
+                  <div>
+                    <p className="text-xs text-slate-500">Agent</p>
+                    <p className="text-sm font-semibold text-white">{agentConfig?.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Session ID</p>
+                    <p className="text-xs font-mono text-emerald-400">{sessionId.slice(0, 20)}...</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-700 pt-6">
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                  Wallet Keypair
+                </h3>
+                {keypair ? (
+                  <WalletInfo publicKey={keypair.publicKey} secret={keypair.secret} />
+                ) : (
+                  <div className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg text-xs text-slate-400">
+                    Loading wallet information...
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-slate-700 pt-6">
+                <SpecialistNetwork
+                  publicKey={keypair?.publicKey || ''}
+                  secretKey={keypair?.secret || ''}
+                  apiUrl={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
+                />
               </div>
 
               <button
                 onClick={handleReset}
-                className="w-full px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg transition-colors"
+                className="w-full px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg transition-colors mt-auto"
               >
-                Back to Configuration
+                Configure New Agent
               </button>
             </div>
           )}
@@ -139,29 +183,13 @@ export default function Home() {
           {view === 'config' ? (
             <AgentNetwork onAgentSelect={setSelectedAgent} />
           ) : (
-            <div className="flex gap-1 h-full overflow-hidden">
-              <div className="flex-1 min-w-0 border-r border-slate-800 overflow-hidden">
-                <AgentChat
-                  sessionId={sessionId}
-                  agentName={agentConfig?.name || 'Agent'}
-                  onSendMessage={handleSendMessage}
-                  isLoading={isLoading}
-                  isPaying={isPaying}
-                />
-              </div>
-              {keypair && (
-                <div className="w-96 border-l border-slate-800 overflow-y-auto p-4">
-                  <h3 className="text-sm font-semibold text-slate-300 mb-4">
-                    Specialist Agents
-                  </h3>
-                  <SpecialistAgents
-                    publicKey={keypair.publicKey}
-                    secretKey={keypair.secret}
-                    apiUrl={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
-                  />
-                </div>
-              )}
-            </div>
+            <AgentChat
+              sessionId={sessionId}
+              agentName={agentConfig?.name || 'Agent'}
+              onSendMessage={handleSendMessage}
+              isLoading={isLoading}
+              isPaying={isPaying}
+            />
           )}
         </div>
 
@@ -177,6 +205,20 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {showPreMadeAgents && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-2xl h-[80vh] bg-slate-950 rounded-xl shadow-2xl overflow-hidden">
+            <PreMadeAgents
+              publicKey={keypair?.publicKey}
+              secretKey={keypair?.secret}
+              apiUrl={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
+              onWalletLoaded={setKeypair}
+              onClose={() => setShowPreMadeAgents(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

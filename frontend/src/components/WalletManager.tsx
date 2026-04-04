@@ -8,11 +8,13 @@ import { StellarUtil } from '@/lib/stellar';
 interface WalletManagerProps {
   onKeypairSelected: (keypair: { publicKey: string; secret: string }) => void;
   isConfigured: boolean;
+  selectedKeypair?: { publicKey: string; secret: string } | null;
 }
 
 export default function WalletManager({
   onKeypairSelected,
   isConfigured,
+  selectedKeypair,
 }: WalletManagerProps) {
   const [mode, setMode] = useState<'menu' | 'generate' | 'import' | 'view'>('menu');
   const [generatedKeypair, setGeneratedKeypair] = useState<{
@@ -42,6 +44,7 @@ export default function WalletManager({
         secret: newKeypair.secret(),
       };
       setGeneratedKeypair(keypair);
+      setBalance(null);
       setMode('view');
       setError(null);
     } catch (err) {
@@ -62,6 +65,7 @@ export default function WalletManager({
         secret: keypair.secret(),
       };
       setGeneratedKeypair(walletKeypair);
+      setBalance(null);
       setMode('view');
       setError(null);
     } catch (err) {
@@ -95,6 +99,12 @@ export default function WalletManager({
     }
   }, [mode, generatedKeypair]);
 
+  useEffect(() => {
+    if (selectedKeypair?.publicKey && selectedKeypair.secret) {
+      setGeneratedKeypair(selectedKeypair);
+    }
+  }, [selectedKeypair]);
+
   const fundWalletWithFriendbot = async () => {
     if (!generatedKeypair) return;
     setIsFunding(true);
@@ -125,6 +135,22 @@ export default function WalletManager({
 
       {mode === 'menu' && (
         <div className="space-y-2">
+          {generatedKeypair && (
+            <div className="p-3 bg-slate-900/50 border border-slate-700 rounded-lg space-y-2">
+              <p className="text-xs text-slate-400">Active wallet</p>
+              <p className="text-xs font-mono text-emerald-400 break-all">
+                {generatedKeypair.publicKey}
+              </p>
+              <button
+                type="button"
+                onClick={() => setMode('view')}
+                className="w-full px-3 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition-colors"
+              >
+                View Wallet Details
+              </button>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={() => {
@@ -341,7 +367,6 @@ export default function WalletManager({
               type="button"
               onClick={() => {
                 setMode('menu');
-                setGeneratedKeypair(null);
                 setImportedSecret('');
                 setError(null);
               }}

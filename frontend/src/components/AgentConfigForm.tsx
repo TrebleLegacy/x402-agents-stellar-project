@@ -8,11 +8,13 @@ import WalletManager from './WalletManager';
 interface AgentConfigProps {
   onConfigSubmit: (config: AgentConfigType, keypair: { publicKey: string; secret: string }) => void;
   isLoading: boolean;
+  onKeypairChange?: (keypair: { publicKey: string; secret: string }) => void;
 }
 
 export default function AgentConfigForm({
   onConfigSubmit,
   isLoading,
+  onKeypairChange,
 }: AgentConfigProps) {
   const [config, setConfig] = useState<AgentConfigType>({
     name: '',
@@ -37,6 +39,7 @@ export default function AgentConfigForm({
     secret: string;
   }) => {
     setKeypair(selectedKeypair);
+    onKeypairChange?.(selectedKeypair);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -159,6 +162,7 @@ export default function AgentConfigForm({
           <WalletManager
             onKeypairSelected={handleKeypairSelected}
             isConfigured={!!keypair.publicKey}
+            selectedKeypair={keypair}
           />
         </div>
 

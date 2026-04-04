@@ -58,7 +58,7 @@ export class StellarUtil {
   async submitTransaction(transaction: Transaction): Promise<string> {
     try {
       const result = await this.server.submitTransaction(transaction);
-      return result.id;
+      return result.hash;
     } catch (error) {
       console.error('Transaction submission error:', error);
       throw error;

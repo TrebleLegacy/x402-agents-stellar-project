@@ -25,8 +25,8 @@ export class X402PaymentClient {
 
   private getNetworkPassphrase(): string {
     return this.network === 'testnet'
-      ? StellarSdk.Networks.TESTNET_NETWORK_PASSPHRASE
-      : StellarSdk.Networks.PUBLIC_NETWORK_PASSPHRASE;
+      ? StellarSdk.Networks.TESTNET
+      : StellarSdk.Networks.PUBLIC;
   }
 
   buildUnsignedTransaction(props: X402PaymentInput): string {

@@ -287,12 +287,23 @@ export default function SpecialistAgents({
           )}
 
           {result && (
-            <div className={`p-3 rounded border ${result.success ? 'border-emerald-700 bg-emerald-900/20' : 'border-red-700 bg-red-900/20'}`}>
+            <div className={`p-4 rounded border space-y-3 ${result.success ? 'border-emerald-700 bg-emerald-900/20' : 'border-red-700 bg-red-900/20'}`}>
               {result.success ? (
-                <div className="text-sm">
-                  <pre className="text-xs text-slate-300 overflow-auto max-h-64 whitespace-pre-wrap">
-                    {JSON.stringify(result.data, null, 2)}
-                  </pre>
+                <div className="text-sm space-y-3">
+                  {result.data?.reasoning && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-slate-300 mb-2">Agent Reasoning:</h4>
+                      <div className="text-xs text-slate-300 bg-slate-900/50 p-2 rounded border border-slate-700 italic">
+                        {result.data.reasoning}
+                      </div>
+                    </div>
+                  )}
+                  <details>
+                    <summary className="text-xs font-semibold text-slate-400 cursor-pointer hover:text-slate-300">Full Response</summary>
+                    <pre className="text-xs text-slate-400 overflow-auto max-h-64 whitespace-pre-wrap mt-2 bg-slate-950 p-2 rounded">
+                      {JSON.stringify(result.data, null, 2)}
+                    </pre>
+                  </details>
                 </div>
               ) : (
                 <div className="flex gap-2 items-start">

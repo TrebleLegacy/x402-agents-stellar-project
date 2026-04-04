@@ -1,9 +1,11 @@
 import { Router } from 'express';
-import { logger } from '../utils/logger';
-import { x402Service } from '../services/x402Service';
-import { requirePayment } from '../api/middlewares/requirePayment';
+import { ChatOpenAI } from '@langchain/openai';
+import { logger } from '../../utils/logger';
+import { x402Service } from '../../services/x402Service';
+import { requirePayment } from '../middlewares/requirePayment';
 
 const router = Router();
+const llm = new ChatOpenAI({ modelName: 'gpt-4-turbo', temperature: 0.7 });
 
 interface NewsQuery {
   category?: string;
@@ -25,75 +27,59 @@ interface NewsResponse {
     category: string;
     articles: NewsArticle[];
     timestamp: number;
+    reasoning: string;
   };
   error?: string;
 }
 
-const MOCK_NEWS = {
-  blockchain: [
-    {
-      id: '1',
-      title: 'Stellar Network Achieves 1M TPS Milestone',
-      description:
-        'The Stellar network has successfully processed 1 million transactions per second',
-      source: 'CryptoNews Daily',
-      relevanceScore: 0.95,
-    },
-    {
-      id: '2',
-      title: 'Major DeFi Protocol Launches on Stellar',
-      description:
-        'Leading DeFi protocol announces integration with Stellar blockchain',
-      source: 'DeFi Times',
-      relevanceScore: 0.88,
-    },
-    {
-      id: '3',
-      title: 'Stellar Foundation Grants $5M for Development',
-      description: 'New grants program to support Stellar ecosystem development',
-      source: 'Stellar Blog',
-      relevanceScore: 0.92,
-    },
-  ],
-  defi: [
-    {
-      id: '4',
-      title: 'DeFi TVL Reaches New All-Time High',
-      description: 'Total Value Locked in DeFi protocols exceeds $100 billion',
-      source: 'DeFi Pulse',
-      relevanceScore: 0.90,
-    },
-    {
-      id: '5',
-      title: 'New Yield Farming Strategy Shows 50% APY',
-      description: 'Innovative farming strategy deployed on multiple protocols',
-      source: 'Yield Optimizers',
-      relevanceScore: 0.82,
-    },
-    {
-      id: '6',
-      title: 'Security Audit Reveals Minor Vulnerabilities',
-      description: 'Popular DeFi protocol undergoes successful security review',
-      source: 'Security Audits Weekly',
-      relevanceScore: 0.85,
-    },
-  ],
-  payments: [
-    {
-      id: '7',
-      title: 'X402 Standard Adoption Accelerates',
-      description: 'More payment providers integrate X402 payment protocol',
-      source: 'Payment Tech News',
-      relevanceScore: 0.91,
-    },
-    {
-      id: '8',
-      title: 'Cross-Border Payments See 40% Reduction in Costs',
-      description: 'Blockchain-based payments now cheaper than traditional methods',
-      source: 'Financial Times',
-      relevanceScore: 0.87,
-    },
-  ],
+const generateLLMArticles = async (category: string, limit: number): Promise<{ articles: NewsArticle[]; reasoning: string }> => {
+  const prompt = `You are a crypto news curator. Generate ${limit} relevant news articles about ${category} in the crypto/blockchain space.
+
+Return ONLY a valid JSON object in this format:
+{
+  "reasoning": "Your selection criteria and reasoning for these articles",
+  "articles": [
+    { "title": "Article headline", "description": "Article summary", "source": "News Source Name", "relevanceScore": 0.95 },
+    ...
+  ]
+}
+
+Make the articles realistic, current, and relevant to ${category}. Relevance scores should be between 0.8 and 1.0. Include your reasoning for why these articles are relevant.`;
+
+  try {
+    const response = await llm.invoke(prompt);
+    const content = response.content as string;
+    const matches = content.match(/\{[\s\S]*\}/);
+    if (!matches) throw new Error('Invalid JSON format');
+    const result = JSON.parse(matches[0]);
+    const articles = (result.articles || []).slice(0, limit).map((article: any, i: number) => ({
+      id: String(i + 1),
+      title: article.title || 'News Article',
+      description: article.description || 'Article summary unavailable',
+      source: article.source || 'Crypto News',
+      timestamp: Date.now(),
+      relevanceScore: article.relevanceScore || 0.85,
+    }));
+    return {
+      articles,
+      reasoning: result.reasoning || `Generated ${limit} relevant articles for ${category}`,
+    };
+  } catch (error) {
+    logger.error(`LLM error generating articles: ${error instanceof Error ? error.message : String(error)}`);
+    return {
+      articles: [
+        {
+          id: '1',
+          title: `Latest ${category} News`,
+          description: 'Stay updated with the latest developments',
+          source: 'Crypto News Feed',
+          timestamp: Date.now(),
+          relevanceScore: 0.85,
+        },
+      ],
+      reasoning: 'News feed generated with default articles',
+    };
+  }
 };
 
 router.post(
@@ -103,7 +89,7 @@ router.post(
     asset: 'USDC',
     description: 'News Feed - Curated News & Articles',
   }),
-  async (req, res) => {
+  async (req, res, _next) => {
     try {
       const { query, publicKey } = req.body as {
         query: NewsQuery;
@@ -114,30 +100,25 @@ router.post(
         `[NewsAgent] Processing news feed request for: ${query.category}`
       );
 
-      const category = (query.category || 'blockchain') as keyof typeof MOCK_NEWS;
-      const articles = MOCK_NEWS[category] || MOCK_NEWS.blockchain;
-      const limit = query.limit || 5;
+      const category = query.category || 'blockchain';
+      const limit = Math.min(query.limit || 5, 10);
 
-      const filteredArticles = articles
-        .slice(0, limit)
-        .map((article) => ({
-          ...article,
-          timestamp: Date.now(),
-        }));
+      const { articles, reasoning } = await generateLLMArticles(category, limit);
 
       const response: NewsResponse = {
         success: true,
         data: {
           category: query.category || 'blockchain',
-          articles: filteredArticles,
+          articles,
           timestamp: Date.now(),
+          reasoning,
         },
       };
 
       logger.info(`[NewsAgent] Feed sent to: ${publicKey}`);
       res.json(response);
     } catch (error) {
-      logger.error('[NewsAgent] Error:', error);
+      logger.error(`[NewsAgent] Error: ${error instanceof Error ? error.message : String(error)}`);
       res.status(500).json({
         success: false,
         error: 'Internal server error',

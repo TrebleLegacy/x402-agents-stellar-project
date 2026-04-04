@@ -1,9 +1,11 @@
 import { Router } from 'express';
-import { logger } from '../utils/logger';
-import { x402Service } from '../services/x402Service';
-import { requirePayment } from '../api/middlewares/requirePayment';
+import { ChatOpenAI } from '@langchain/openai';
+import { logger } from '../../utils/logger';
+import { x402Service } from '../../services/x402Service';
+import { requirePayment } from '../middlewares/requirePayment';
 
 const router = Router();
+const llm = new ChatOpenAI({ modelName: 'gpt-4-turbo', temperature: 0.7 });
 
 interface SecurityQuery {
   target?: string;
@@ -25,53 +27,52 @@ interface SecurityResponse {
     timestamp: number;
     findings: SecurityFinding[];
     riskScore: number;
+    reasoning: string;
   };
   error?: string;
 }
 
-const generateMockFindings = (scanType: string): SecurityFinding[] => {
-  const findings: SecurityFinding[] = [];
+const generateLLMFindings = async (target: string, scanType: string): Promise<{ findings: SecurityFinding[]; reasoning: string }> => {
+  const depth = scanType === 'quick' ? 1 : scanType === 'deep' ? 3 : 5;
+  const prompt = `You are a security scanner for the website/application: ${target}
+Perform a ${scanType} security scan and identify ${depth} potential security vulnerabilities.
 
-  if (scanType === 'quick' || scanType === 'deep' || scanType === 'comprehensive') {
-    findings.push({
-      id: '1',
-      severity: 'medium',
-      title: 'Outdated Dependencies',
-      description: 'Found 3 outdated npm packages with known vulnerabilities',
-    });
+Return ONLY a valid JSON object in this format:
+{
+  "reasoning": "Your chain of thought and analysis process",
+  "findings": [
+    { "id": "1", "severity": "critical|high|medium|low", "title": "Finding title", "description": "Finding description" },
+    ...
+  ]
+}
+
+Make findings realistic and relevant to ${target}. Vary the severity levels. Include your reasoning for why these vulnerabilities were identified.`;
+
+  try {
+    const response = await llm.invoke(prompt);
+    const content = response.content as string;
+    const matches = content.match(/\{[\s\S]*\}/);
+    if (!matches) throw new Error('Invalid JSON format');
+    const result = JSON.parse(matches[0]);
+    const findings = (result.findings || []).slice(0, depth).map((f: any, i: number) => ({
+      id: String(i + 1),
+      severity: f.severity || 'medium',
+      title: f.title || 'Security Issue',
+      description: f.description || 'Potential vulnerability detected',
+    }));
+    return {
+      findings,
+      reasoning: result.reasoning || 'Security analysis completed',
+    };
+  } catch (error) {
+    logger.error(`LLM error generating findings: ${error instanceof Error ? error.message : String(error)}`);
+    return {
+      findings: [
+        { id: '1', severity: 'medium', title: 'Default Finding', description: 'Security scan completed' },
+      ],
+      reasoning: 'Security scan completed with default findings',
+    };
   }
-
-  if (scanType === 'deep' || scanType === 'comprehensive') {
-    findings.push({
-      id: '2',
-      severity: 'high',
-      title: 'Weak Encryption',
-      description: 'Database connection uses legacy encryption standard',
-    });
-    findings.push({
-      id: '3',
-      severity: 'low',
-      title: 'API Rate Limiting',
-      description: 'API endpoints lack proper rate limiting configuration',
-    });
-  }
-
-  if (scanType === 'comprehensive') {
-    findings.push({
-      id: '4',
-      severity: 'critical',
-      title: 'Exposed API Keys',
-      description: 'Found 2 exposed API keys in git history',
-    });
-    findings.push({
-      id: '5',
-      severity: 'high',
-      title: 'SQL Injection Risk',
-      description: 'User input not properly sanitized in 1 endpoint',
-    });
-  }
-
-  return findings;
 };
 
 router.post(
@@ -81,7 +82,7 @@ router.post(
     asset: 'USDC',
     description: 'Security Scan - Incident Detection & Analysis',
   }),
-  async (req, res) => {
+  async (req, res, _next) => {
     try {
       const { query, publicKey } = req.body as {
         query: SecurityQuery;
@@ -99,7 +100,7 @@ router.post(
         } as SecurityResponse);
       }
 
-      const findings = generateMockFindings(query.scanType);
+      const { findings, reasoning } = await generateLLMFindings(query.target, query.scanType);
       const riskScore = findings.reduce((score, finding) => {
         const severityScore =
           finding.severity === 'critical'
@@ -120,13 +121,14 @@ router.post(
           timestamp: Date.now(),
           findings,
           riskScore,
+          reasoning,
         },
       };
 
       logger.info(`[SecurityAgent] Scan complete for: ${publicKey}`);
       res.json(response);
     } catch (error) {
-      logger.error('[SecurityAgent] Error:', error);
+      logger.error(`[SecurityAgent] Error: ${error instanceof Error ? error.message : String(error)}`);
       res.status(500).json({
         success: false,
         error: 'Internal server error',

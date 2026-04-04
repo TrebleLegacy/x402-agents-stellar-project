@@ -6,6 +6,7 @@
 require('dotenv').config();
 
 import express from 'express';
+import cors from 'cors';
 import paymentsRouter from './api/routes/payments';
 import onboardRouter from './api/routes/onboard';
 import actionsRouter from './api/routes/actions.router';
@@ -24,6 +25,20 @@ const port = Number(process.env.PORT) || 8000;
 const openaiApiKey = process.env.OPENAI_API_KEY || '';
 
 // Middleware
+app.use(
+  cors({
+    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'PAYMENT-SIGNATURE',
+      'X-402-Network',
+      'X-402-Scheme',
+      'X-402-Facilitator',
+    ],
+  })
+);
 app.use(express.json());
 
 // Logging middleware

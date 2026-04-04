@@ -20,61 +20,71 @@ interface PaymentRequest extends Request {
   };
 }
 
+interface PaymentConfig {
+  requiredAmount: string;
+  asset?: string;
+  description?: string;
+}
+
 /**
- * Validate and prepare payment context for agent execution
+ * Middleware factory that validates X402 payment context for agent execution
  */
-export const requirePayment = async (req: PaymentRequest, res: Response, next: NextFunction) => {
-  try {
-    const { sourcePublicKey, destination, amount, assetCode } = req.body;
+export const requirePayment = (config: PaymentConfig) => {
+  return async (req: PaymentRequest, res: Response, next: NextFunction) => {
+    try {
+      const { sourcePublicKey, destination, amount, assetCode } = req.body;
 
-    // Validate required fields
-    if (!sourcePublicKey || !destination || !amount) {
-      return res.status(400).json({
+      // Validate required fields
+      if (!sourcePublicKey || !destination || !amount) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required payment fields: sourcePublicKey, destination, amount',
+        });
+      }
+
+      // Validate public keys
+      if (!StellarVerify.isValidPublicKey(sourcePublicKey)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid source public key format',
+        });
+      }
+
+      if (!StellarVerify.isValidPublicKey(destination)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid destination public key format',
+        });
+      }
+
+      // Validate amount
+      if (!StellarVerify.isValidAmount(amount)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid amount (must be positive number)',
+        });
+      }
+
+      // Attach validated payment context to request
+      req.payment = {
+        sourcePublicKey,
+        destination,
+        amount,
+        assetCode: assetCode || config.asset || 'XLM',
+      };
+
+      logger.info(
+        `Payment context validated: ${config.requiredAmount} ${config.asset || 'XLM'} for ${config.description || 'agent execution'}`
+      );
+      next();
+    } catch (error: any) {
+      logger.error(`Payment validation error: ${error.message}`);
+      res.status(500).json({
         success: false,
-        error: 'Missing required payment fields: sourcePublicKey, destination, amount',
+        error: 'Payment validation failed',
       });
     }
-
-    // Validate public keys
-    if (!StellarVerify.isValidPublicKey(sourcePublicKey)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid source public key format',
-      });
-    }
-
-    if (!StellarVerify.isValidPublicKey(destination)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid destination public key format',
-      });
-    }
-
-    // Validate amount
-    if (!StellarVerify.isValidAmount(amount)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid amount (must be positive number)',
-      });
-    }
-
-    // Attach validated payment context to request
-    req.payment = {
-      sourcePublicKey,
-      destination,
-      amount,
-      assetCode: assetCode || 'XLM',
-    };
-
-    logger.info(`Payment context validated: ${amount} ${assetCode || 'XLM'} to ${destination}`);
-    next();
-  } catch (error: any) {
-    logger.error(`Payment validation error: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      error: 'Payment validation failed',
-    });
-  }
+  };
 };
 
 /**
