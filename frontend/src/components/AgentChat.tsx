@@ -54,6 +54,8 @@ export default function AgentChat({
           role: 'assistant',
           content: response.response,
           timestamp: new Date().toISOString(),
+          trace: response.trace,
+          agentDebug: response.agentDebug,
         };
         setMessages(prev => [...prev, assistantMessage]);
       } else {
@@ -112,6 +114,55 @@ export default function AgentChat({
                   <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                     {msg.content}
                   </p>
+
+                  {msg.role === 'assistant' && (msg.trace?.length || msg.agentDebug) ? (
+                    <div className="mt-3 pt-3 border-t border-slate-700/70 space-y-2">
+                      {msg.trace?.length ? (
+                        <details className="bg-slate-900/60 rounded border border-slate-700">
+                          <summary className="px-3 py-2 text-xs text-emerald-300 cursor-pointer font-medium">
+                            Execution Trace
+                          </summary>
+                          <div className="px-3 pb-3 space-y-2">
+                            {msg.trace.map((event, traceIdx) => (
+                              <div
+                                key={traceIdx}
+                                className="text-xs text-slate-300 bg-slate-950/70 rounded border border-slate-800 p-2 space-y-1"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-semibold text-emerald-400">
+                                    {event.stage}
+                                  </span>
+                                  <span className="text-slate-500">
+                                    {new Date(event.at).toLocaleTimeString()}
+                                  </span>
+                                </div>
+                                <p>{event.detail}</p>
+                                {event.payload !== undefined && (
+                                  <pre className="text-[11px] text-slate-400 whitespace-pre-wrap break-words bg-slate-950 p-2 rounded border border-slate-800 overflow-x-auto">
+                                    {JSON.stringify(event.payload, null, 2)}
+                                  </pre>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      ) : null}
+
+                      {msg.agentDebug ? (
+                        <details className="bg-slate-900/60 rounded border border-slate-700">
+                          <summary className="px-3 py-2 text-xs text-blue-300 cursor-pointer font-medium">
+                            Agent Reasoning Snapshot
+                          </summary>
+                          <div className="px-3 pb-3">
+                            <pre className="text-[11px] text-slate-300 whitespace-pre-wrap break-words bg-slate-950 p-2 rounded border border-slate-800 overflow-x-auto">
+                              {JSON.stringify(msg.agentDebug, null, 2)}
+                            </pre>
+                          </div>
+                        </details>
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   {msg.timestamp && (
                     <p className="text-xs mt-1 opacity-70">
                       {new Date(msg.timestamp).toLocaleTimeString()}

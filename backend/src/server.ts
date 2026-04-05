@@ -11,6 +11,8 @@ import paymentsRouter from './api/routes/payments';
 import onboardRouter from './api/routes/onboard';
 import actionsRouter from './api/routes/actions.router';
 import x402TestRouter from './api/routes/x402.test';
+import x402SdkRouter from './api/routes/x402.sdk.demo';
+import forgeRouter from './api/routes/forge';
 import stellarTestRouter from './api/routes/stellar.test';
 import defiAgentRouter from './api/routes/defi.agent';
 import securityAgentRouter from './api/routes/security.agent';
@@ -25,18 +27,37 @@ const port = Number(process.env.PORT) || 8000;
 const openaiApiKey = process.env.OPENAI_API_KEY || '';
 
 // Middleware
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
+const allowAllOrigins = process.env.CORS_ALLOW_ALL === 'true';
+
 app.use(
   cors({
-    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    origin: (origin, callback) => {
+      if (!origin || allowAllOrigins) {
+        callback(null, true);
+        return;
+      }
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('CORS origin not allowed'));
+    },
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
       'Authorization',
       'PAYMENT-SIGNATURE',
+      'Payment-Signature',
       'X-402-Network',
       'X-402-Scheme',
       'X-402-Facilitator',
     ],
+    exposedHeaders: ['payment-response', 'Payment-Response'],
   })
 );
 app.use(express.json());
@@ -65,13 +86,15 @@ app.get('/', (_req, res) => {
       x402Testnet: '/api/x402/test/payment - Test x402 integration',
       stellarTestnet: '/api/stellar/test/generate-keypair - Generate test keypair',
       documentation: 'See /api/x402/test/config for setup instructions',
+      sdkDemo: '/api/x402-sdk/demo/echo - SDK paid endpoint demo',
+      forge: '/api/forge/execute - Forge v2 runtime',
     },
   });
 });
 
 // x402 Payment Middleware Configuration
 const x402PriceMap = {
-  'GET /api/agent/query': '$0.001',
+  'POST /api/agent/query': '$0.001',
   'POST /api/payments/build': '$0.005',
 };
 
@@ -83,6 +106,8 @@ app.use('/api/payments', paymentsRouter);
 app.use('/api/onboard', onboardRouter);
 app.use('/api/actions', actionsRouter);
 app.use('/api/x402', x402TestRouter);
+app.use('/api/x402-sdk', x402SdkRouter);
+app.use('/api/forge', forgeRouter);
 app.use('/api/stellar', stellarTestRouter);
 
 // Specialized Agent Routes (with x402 payment requirement)

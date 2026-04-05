@@ -114,6 +114,21 @@ export function createAgentRoutes(
         intent: resultState.detected_intent,
         action: resultState.action_type,
         success: resultState.success,
+        debug: {
+          intent: resultState.detected_intent,
+          action: resultState.action_type,
+          success: resultState.success,
+          waiting_for_wallet_input: resultState.waiting_for_wallet_input,
+          pending_payment: resultState.pending_payment
+            ? {
+                destination: resultState.pending_payment.destination,
+                destination_name: resultState.pending_payment.destination_name,
+                amount: resultState.pending_payment.amount,
+                asset_code: resultState.pending_payment.asset_code,
+              }
+            : undefined,
+          error: resultState.error,
+        },
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Database, AlertTriangle, Newspaper, Zap, ChevronRight } from 'lucide-react';
 import { SpecialistAgentClient } from '@/lib/specialistAgents';
+import { InteractionLogEvent } from '@/types/agent';
 
 interface SpecialistNetworkProps {
   publicKey: string;
   secretKey: string;
   apiUrl: string;
+  onLog?: (event: InteractionLogEvent) => void;
 }
 
 type AgentType = 'defi' | 'security' | 'news';
@@ -60,13 +62,21 @@ export default function SpecialistNetwork({
   publicKey,
   secretKey,
   apiUrl,
+  onLog,
 }: SpecialistNetworkProps) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentType | null>(null);
 
-  const client = new SpecialistAgentClient(apiUrl, 'testnet');
-  client.setKeypair(publicKey, secretKey);
+  const client = useMemo(() => {
+    const instance = new SpecialistAgentClient(apiUrl, 'testnet');
+    instance.setLogger(onLog);
+    return instance;
+  }, [apiUrl, onLog]);
+
+  if (publicKey && secretKey) {
+    client.setKeypair(publicKey, secretKey);
+  }
 
   const handleQuery = async (agent: AgentType, params: Record<string, any>) => {
     setLoading(true);

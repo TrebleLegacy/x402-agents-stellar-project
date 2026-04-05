@@ -8,10 +8,9 @@
 
 require('dotenv').config();
 
-import axios from 'axios';
-import { X402PaymentBuilder } from './stellar/x402PaymentBuilder';
 import { StellarClient } from './stellar/client';
 import { logger } from './utils/logger';
+import { X402Client } from './sdk/x402/client';
 
 interface X402PaymentConfig {
   apiUrl: string;
@@ -27,9 +26,16 @@ interface X402PaymentConfig {
  */
 class X402AgentClient {
   private config: X402PaymentConfig;
+  private sdkClient: X402Client;
 
   constructor(config: X402PaymentConfig) {
     this.config = config;
+    this.sdkClient = new X402Client({
+      baseURL: config.apiUrl,
+      publicKey: config.clientPublicKey,
+      secretKey: config.clientSecretKey,
+      network: 'stellar:testnet',
+    });
   }
 
   /**
@@ -38,85 +44,18 @@ class X402AgentClient {
   async requestWithPayment(req_body: any = {}): Promise<any> {
     try {
       logger.info(`Requesting endpoint: ${this.config.endpoint}`);
-
-      // Step 1: Make initial request (will get 402)
-      let response;
-      try {
-        response = await axios.get(`${this.config.apiUrl}${this.config.endpoint}`, {
-          data: req_body,
-        });
-        // If it succeeds without payment, return the result
-        return response.data;
-      } catch (error: any) {
-        if (error.response?.status !== 402) {
-          throw error;
-        }
-        // Expected 402 response
-        response = error.response;
-      }
-
-      // Step 2: Parse payment instructions from 402 response
-      logger.info('Received 402 Payment Required');
-      const paymentInstructions = response.data.instructions;
-      logger.info(`Payment instructions: ${JSON.stringify(paymentInstructions)}`);
-
-      // Step 3: Build and sign the payment transaction
-      logger.info('Building and signing x402 payment transaction...');
-      
-      const paymentInput = {
-        sourcePublicKey: this.config.clientPublicKey,
-        receiveSigningPublicKey: this.config.serverPublicKey,
-        destinationAddress: paymentInstructions.payTo,
-        amount: this.extractAmount(paymentInstructions.price),
-        assetContract: paymentInstructions.asset || '', // USDC or custom
-        price: paymentInstructions.price,
-      };
-
-      const paymentSignatureHeader = await X402PaymentBuilder.buildAndSign(
-        paymentInput,
-        this.config.clientSecretKey
-      );
-
-      logger.info('Payment transaction signed successfully');
-
-      // Step 4: Resubmit request with Payment-Signature header
-      logger.info('Submitting request with payment signature...');
-      
-      const retryResponse = await axios.get(
-        `${this.config.apiUrl}${this.config.endpoint}`,
-        {
-          headers: {
-            'Payment-Signature': paymentSignatureHeader,
-          },
-          data: req_body,
-        }
-      );
+      const data = await this.sdkClient.payAndRequest({
+        method: 'get',
+        path: this.config.endpoint,
+        data: req_body,
+      });
 
       logger.info('Payment accepted and request succeeded');
-
-      // Step 5: Parse payment response if available
-      if (retryResponse.headers['payment-response']) {
-        const paymentResponse = X402PaymentBuilder.parsePaymentResponse(
-          retryResponse.headers['payment-response']
-        );
-        logger.info(`Payment settled: ${JSON.stringify(paymentResponse)}`);
-      }
-
-      return retryResponse.data;
+      return data;
     } catch (error: any) {
       logger.error(`Request failed: ${error.message}`);
       throw error;
     }
-  }
-
-  private extractAmount(price: string): string {
-    // Parse "$0.001" to "1000" (in stroops, where 1 XLM = 10,000,000 stroops)
-    if (typeof price === 'string' && price.startsWith('$')) {
-      const dollars = parseFloat(price.substring(1));
-      // Assuming USDC with 7 decimals on Stellar
-      return Math.floor(dollars * 10000000).toString();
-    }
-    return price;
   }
 }
 

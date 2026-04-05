@@ -18,6 +18,38 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp?: string;
+  trace?: AgentTraceEvent[];
+  agentDebug?: AgentDebugInfo;
+}
+
+export interface AgentTraceEvent {
+  at: string;
+  stage:
+    | 'request_started'
+    | 'paywall_received'
+    | 'payment_signing_started'
+    | 'payment_signing_completed'
+    | 'payment_retry_submitted'
+    | 'payment_retry_succeeded'
+    | 'payment_retry_failed'
+    | 'request_succeeded'
+    | 'request_failed';
+  detail: string;
+  payload?: unknown;
+}
+
+export interface AgentDebugInfo {
+  intent?: string;
+  action?: string;
+  success?: boolean;
+  waiting_for_wallet_input?: boolean;
+  pending_payment?: {
+    destination?: string;
+    amount?: string;
+    asset_code?: string;
+    destination_name?: string;
+  };
+  error?: string;
 }
 
 export interface AgentQueryRequest {
@@ -31,6 +63,9 @@ export interface AgentQueryResponse {
   messages: Message[];
   status: 'success' | 'error';
   error?: string;
+  trace?: AgentTraceEvent[];
+  agentDebug?: AgentDebugInfo;
+  paymentResponse?: Record<string, unknown>;
 }
 
 export interface PaymentSignatureHeader {
@@ -46,4 +81,12 @@ export interface PaymentInstructions {
   network: string;
   payTo: string;
   facilitatorUrl: string;
+}
+
+export interface InteractionLogEvent {
+  at: string;
+  source: 'agent' | 'specialist' | 'forge' | 'sdk';
+  stage: string;
+  detail: string;
+  payload?: unknown;
 }

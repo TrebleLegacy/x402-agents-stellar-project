@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { ChatOpenAI } from '@langchain/openai';
 import { logger } from '../../utils/logger';
-import { x402Service } from '../../services/x402Service';
-import { requirePayment } from '../middlewares/requirePayment';
+import { createX402ServerFromEnv } from '../../sdk/x402/server';
 
 const router = Router();
 const llm = new ChatOpenAI({ modelName: 'gpt-4-turbo', temperature: 0.7 });
+const x402 = createX402ServerFromEnv();
 
 interface SecurityQuery {
   target?: string;
@@ -77,64 +77,66 @@ Make findings realistic and relevant to ${target}. Vary the severity levels. Inc
 
 router.post(
   '/scan',
-  requirePayment({
-    requiredAmount: '0.20',
-    asset: 'USDC',
+  x402.wrapEndpoint({
+    price: '0.20',
+    asset: 'XLM',
     description: 'Security Scan - Incident Detection & Analysis',
-  }),
-  async (req, res, _next) => {
-    try {
-      const { query, publicKey } = req.body as {
-        query: SecurityQuery;
-        publicKey: string;
-      };
+    handler: async (req, res) => {
+      try {
+        const { query, publicKey } = req.body as {
+          query: SecurityQuery;
+          publicKey: string;
+        };
 
-      logger.info(
-        `[SecurityAgent] Processing scan for: ${query.target} - ${query.scanType}`
-      );
+        logger.info(
+          `[SecurityAgent] Processing scan for: ${query.target} - ${query.scanType}`
+        );
 
-      if (!query.target || !query.scanType) {
-        return res.status(400).json({
+        if (!query.target || !query.scanType) {
+          res.status(400);
+          return {
+            success: false,
+            error: 'Missing target or scanType in query',
+          } as SecurityResponse;
+        }
+
+        const { findings, reasoning } = await generateLLMFindings(query.target, query.scanType);
+        const riskScore = findings.reduce((score, finding) => {
+          const severityScore =
+            finding.severity === 'critical'
+              ? 5
+              : finding.severity === 'high'
+              ? 4
+              : finding.severity === 'medium'
+              ? 3
+              : 1;
+          return score + severityScore;
+        }, 0);
+
+        const response: SecurityResponse = {
+          success: true,
+          data: {
+            target: query.target,
+            scanType: query.scanType,
+            timestamp: Date.now(),
+            findings,
+            riskScore,
+            reasoning,
+          },
+        };
+
+        logger.info(`[SecurityAgent] Scan complete for: ${publicKey}`);
+        return response;
+      } catch (error) {
+        logger.error(`[SecurityAgent] Error: ${error instanceof Error ? error.message : String(error)}`);
+        res.status(500);
+        return {
           success: false,
-          error: 'Missing target or scanType in query',
-        } as SecurityResponse);
+          error: 'Internal server error',
+        } as SecurityResponse;
       }
-
-      const { findings, reasoning } = await generateLLMFindings(query.target, query.scanType);
-      const riskScore = findings.reduce((score, finding) => {
-        const severityScore =
-          finding.severity === 'critical'
-            ? 5
-            : finding.severity === 'high'
-            ? 4
-            : finding.severity === 'medium'
-            ? 3
-            : 1;
-        return score + severityScore;
-      }, 0);
-
-      const response: SecurityResponse = {
-        success: true,
-        data: {
-          target: query.target,
-          scanType: query.scanType,
-          timestamp: Date.now(),
-          findings,
-          riskScore,
-          reasoning,
-        },
-      };
-
-      logger.info(`[SecurityAgent] Scan complete for: ${publicKey}`);
-      res.json(response);
-    } catch (error) {
-      logger.error(`[SecurityAgent] Error: ${error instanceof Error ? error.message : String(error)}`);
-      res.status(500).json({
-        success: false,
-        error: 'Internal server error',
-      } as SecurityResponse);
-    }
-  }
+    },
+  })
 );
 
 export default router;

@@ -22,6 +22,7 @@ Built for the Stellar Hackathon to demonstrate agentic payment workflows.
 - ✅ **Multi-step Workflows**: Build → Sign → Submit payment transactions
 - ✅ **Real-time Logging**: Full visibility into payment processing
 - ✅ **REST API**: Complete HTTP endpoints for payment operations
+- ✅ **SDK Layer**: Wrap paid endpoints and auto-pay clients with x402
 
 ## 🛠️ Tech Stack
 
@@ -83,9 +84,49 @@ X402_NETWORK=stellar:testnet
 X402_API_KEY=your_x402_api_key
 X402_FACILITATOR_URL=https://channels.openzeppelin.com/x402/testnet
 X402_PAY_TO=your_server_public_key
+X402_STRICT_FACILITATOR=false
 ```
 
 ---
+
+## SDK Quickstart
+
+Server wrapper:
+
+```ts
+import { createX402ServerFromEnv } from './sdk/x402/server';
+
+const x402 = createX402ServerFromEnv();
+
+router.post(
+  '/demo/echo',
+  x402.wrapEndpoint({
+    price: '0.01',
+    asset: 'XLM',
+    description: 'SDK demo endpoint',
+    handler: async (req) => {
+      return { success: true, echo: req.body };
+    },
+  })
+);
+```
+
+Agent client:
+
+```ts
+import { X402SdkClient } from './lib/x402Sdk';
+
+const sdk = new X402SdkClient('http://localhost:8000', 'testnet');
+sdk.setWallet({ publicKey, secret });
+
+const response = await sdk.payAndRequest({
+  method: 'post',
+  path: '/api/x402-sdk/demo/echo',
+  data: { message: 'hello' },
+});
+```
+
+Full SDK documentation: docs/x402-sdk.md
 
 ## 📚 Running x402
 

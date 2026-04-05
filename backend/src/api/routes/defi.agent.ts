@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { ChatOpenAI } from '@langchain/openai';
 import { logger } from '../../utils/logger';
-import { x402Service } from '../../services/x402Service';
-import { requirePayment } from '../middlewares/requirePayment';
+import { createX402ServerFromEnv } from '../../sdk/x402/server';
 
 const router = Router();
 const llm = new ChatOpenAI({ modelName: 'gpt-4-turbo', temperature: 0.7 });
+const x402 = createX402ServerFromEnv();
 
 interface DeFiQuery {
   protocol?: string;
@@ -60,48 +60,50 @@ Make the data realistic based on typical DeFi protocols. Include your reasoning 
 
 router.post(
   '/query',
-  requirePayment({
-    requiredAmount: '0.15',
-    asset: 'USDC',
+  x402.wrapEndpoint({
+    price: '0.15',
+    asset: 'XLM',
     description: 'DeFi Data Query - Real-time protocol metrics',
-  }),
-  async (req, res, _next) => {
-    try {
-      const { query, publicKey } = req.body as { query: DeFiQuery; publicKey: string };
+    handler: async (req, res) => {
+      try {
+        const { query, publicKey } = req.body as { query: DeFiQuery; publicKey: string };
 
-      logger.info(`[DeFiAgent] Processing query for: ${query.protocol} - ${query.metric}`);
+        logger.info(`[DeFiAgent] Processing query for: ${query.protocol} - ${query.metric}`);
 
-      if (!query.protocol || !query.metric) {
-        return res.status(400).json({
+        if (!query.protocol || !query.metric) {
+          res.status(400);
+          return {
+            success: false,
+            error: 'Missing protocol or metric in query',
+          } as DeFiResponse;
+        }
+
+        const { value, reasoning } = await generateLLMDeFiData(query.protocol, query.metric);
+
+        const response: DeFiResponse = {
+          success: true,
+          data: {
+            protocol: query.protocol,
+            metric: query.metric,
+            value,
+            timestamp: Date.now(),
+            source: 'DeFi Data Agent',
+            reasoning,
+          },
+        };
+
+        logger.info(`[DeFiAgent] Response sent to: ${publicKey}`);
+        return response;
+      } catch (error) {
+        logger.error(`[DeFiAgent] Error: ${error instanceof Error ? error.message : String(error)}`);
+        res.status(500);
+        return {
           success: false,
-          error: 'Missing protocol or metric in query',
-        } as DeFiResponse);
+          error: 'Internal server error',
+        } as DeFiResponse;
       }
-
-      const { value, reasoning } = await generateLLMDeFiData(query.protocol, query.metric);
-
-      const response: DeFiResponse = {
-        success: true,
-        data: {
-          protocol: query.protocol,
-          metric: query.metric,
-          value,
-          timestamp: Date.now(),
-          source: 'DeFi Data Agent',
-          reasoning,
-        },
-      };
-
-      logger.info(`[DeFiAgent] Response sent to: ${publicKey}`);
-      res.json(response);
-    } catch (error) {
-      logger.error(`[DeFiAgent] Error: ${error instanceof Error ? error.message : String(error)}`);
-      res.status(500).json({
-        success: false,
-        error: 'Internal server error',
-      } as DeFiResponse);
-    }
-  }
+    },
+  })
 );
 
 export default router;

@@ -7,6 +7,8 @@ export interface X402PaymentInput {
   amount: string;
   assetContract: string;
   price: string;
+  assetCode?: string;
+  assetIssuer?: string;
 }
 
 export interface PaymentSignatureData {
@@ -30,7 +32,7 @@ export class X402PaymentClient {
   }
 
   buildUnsignedTransaction(props: X402PaymentInput): string {
-    const { sourcePublicKey, destinationAddress, amount } = props;
+    const { sourcePublicKey, destinationAddress, amount, assetCode, assetIssuer } = props;
 
     const account = new StellarSdk.Account(sourcePublicKey, '100');
 
@@ -42,7 +44,9 @@ export class X402PaymentClient {
         StellarSdk.Operation.payment({
           destination: destinationAddress,
           amount: amount,
-          asset: StellarSdk.Asset.native(),
+          asset: assetCode && assetIssuer
+            ? new StellarSdk.Asset(assetCode, assetIssuer)
+            : StellarSdk.Asset.native(),
         })
       )
       .setTimeout(30)

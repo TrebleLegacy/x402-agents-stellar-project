@@ -8,12 +8,15 @@ import AgentNetwork from '@/components/AgentNetwork';
 import SpecialistNetwork from '@/components/SpecialistNetwork';
 import PreMadeAgents from '@/components/PreMadeAgents';
 import WalletInfo from '@/components/WalletInfo';
+import ForgeRuntime from '@/components/ForgeRuntime';
+import InteractionLog from '@/components/InteractionLog';
 import { AgentConfig as AgentConfigType, AgentQueryResponse } from '@/types/agent';
 import { AgentAPIClient } from '@/lib/api';
 import { SpecialistAgent } from '@/types/agents';
+import { InteractionLogEvent } from '@/types/agent';
 
 export default function Home() {
-  const [view, setView] = useState<'config' | 'chat'>('config');
+  const [view, setView] = useState<'config' | 'chat' | 'forge'>('config');
   const [showPreMadeAgents, setShowPreMadeAgents] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
@@ -23,6 +26,13 @@ export default function Home() {
   const [selectedAgent, setSelectedAgent] = useState<SpecialistAgent | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [keypair, setKeypair] = useState<{ publicKey: string; secret: string } | null>(null);
+  const [logEvents, setLogEvents] = useState<InteractionLogEvent[]>([]);
+  const [showLogs, setShowLogs] = useState(false);
+
+  const pushLog = (event: InteractionLogEvent) => {
+    setLogEvents(prev => [event, ...prev].slice(0, 200));
+    setShowLogs(true);
+  };
 
   const handleConfigSubmit = async (
     config: AgentConfigType,
@@ -37,6 +47,7 @@ export default function Home() {
 
       const client = new AgentAPIClient(apiUrl, network);
       client.setKeypair(keypairData.publicKey, keypairData.secret);
+      client.setLogger(pushLog);
 
       const newSessionId = `session_${Date.now()}`;
       setSessionId(newSessionId);
@@ -87,6 +98,8 @@ export default function Home() {
     setApiClient(null);
     setSelectedAgent(null);
     setKeypair(null);
+    setLogEvents([]);
+    setShowLogs(false);
   };
 
   return (
@@ -95,8 +108,30 @@ export default function Home() {
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
             <Zap className="w-5 h-5 text-emerald-400" />
-            <h1 className="text-xl font-bold text-white">FORGE</h1>
-            <span className="text-xs text-slate-500 ml-2">x402 Agent Network</span>
+            <h1 className="text-xl font-bold text-white">FORGE v2</h1>
+            <span className="text-xs text-slate-500 ml-2">Trust-aware agent market</span>
+          </div>
+          <div className="hidden md:flex items-center gap-2">
+            <button
+              onClick={() => setView('chat')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                view === 'chat'
+                  ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/40'
+                  : 'bg-slate-900/40 text-slate-300 border border-slate-800'
+              }`}
+            >
+              Agent Chat
+            </button>
+            <button
+              onClick={() => setView('forge')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                view === 'forge'
+                  ? 'bg-amber-500/20 text-amber-200 border border-amber-500/40'
+                  : 'bg-slate-900/40 text-slate-300 border border-slate-800'
+              }`}
+            >
+              Forge Runtime
+            </button>
           </div>
           <button
             onClick={() => setShowPreMadeAgents(!showPreMadeAgents)}
@@ -115,6 +150,13 @@ export default function Home() {
               <Menu className="w-5 h-5 text-slate-400" />
             )}
           </button>
+          <button
+            onClick={() => setShowLogs(prev => !prev)}
+            className="hidden md:flex items-center gap-2 px-3 py-2 bg-slate-900/40 hover:bg-slate-800/60 text-slate-300 rounded-lg text-xs border border-slate-800"
+          >
+            Logs
+            <span className="text-[10px] text-emerald-300">{logEvents.length}</span>
+          </button>
         </div>
       </header>
 
@@ -130,7 +172,7 @@ export default function Home() {
               isLoading={isLoading}
               onKeypairChange={setKeypair}
             />
-          ) : (
+          ) : view === 'chat' ? (
             <div className="flex flex-col h-full p-6 space-y-6">
               <div>
                 <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
@@ -166,6 +208,21 @@ export default function Home() {
                   publicKey={keypair?.publicKey || ''}
                   secretKey={keypair?.secret || ''}
                   apiUrl={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
+                  onLog={pushLog}
+                />
+              </div>
+
+              <div className="border-t border-slate-700 pt-6">
+                <ForgeRuntime
+                  apiUrl={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
+                  onLog={pushLog}
+                />
+              </div>
+
+              <div className="border-t border-slate-700 pt-6">
+                <InteractionLog
+                  events={logEvents}
+                  onClear={() => setLogEvents([])}
                 />
               </div>
 
@@ -176,13 +233,43 @@ export default function Home() {
                 Configure New Agent
               </button>
             </div>
+          ) : (
+            <div className="flex flex-col h-full p-6 space-y-6">
+              <div>
+                <h2 className="text-sm font-semibold text-amber-200 uppercase tracking-wider mb-3">
+                  Forge v2 Controls
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Run competitive agent bidding, audits, and execution with live x402 payments.
+                </p>
+              </div>
+
+              <ForgeRuntime
+                apiUrl={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
+                onLog={pushLog}
+              />
+
+              <div className="mt-6">
+                <InteractionLog
+                  events={logEvents}
+                  onClear={() => setLogEvents([])}
+                />
+              </div>
+
+              <button
+                onClick={() => setView('chat')}
+                className="w-full px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg transition-colors mt-auto"
+              >
+                Back to Agent Chat
+              </button>
+            </div>
           )}
         </div>
 
         <div className="hidden md:flex flex-col flex-1 overflow-hidden">
           {view === 'config' ? (
             <AgentNetwork onAgentSelect={setSelectedAgent} />
-          ) : (
+          ) : view === 'chat' ? (
             <AgentChat
               sessionId={sessionId}
               agentName={agentConfig?.name || 'Agent'}
@@ -190,6 +277,12 @@ export default function Home() {
               isLoading={isLoading}
               isPaying={isPaying}
             />
+          ) : (
+            <div className="flex-1 flex items-center justify-center bg-slate-950">
+              <div className="w-full max-w-2xl p-6">
+                <ForgeRuntime apiUrl={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'} />
+              </div>
+            </div>
           )}
         </div>
 
@@ -203,19 +296,77 @@ export default function Home() {
               isPaying={isPaying}
             />
           )}
+          {view === 'forge' && (
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <ForgeRuntime
+                apiUrl={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
+                onLog={pushLog}
+              />
+              <InteractionLog
+                events={logEvents}
+                onClear={() => setLogEvents([])}
+              />
+            </div>
+          )}
         </div>
       </div>
 
+      {showLogs && !showPreMadeAgents && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 pointer-events-none">
+          <div className="w-full max-w-4xl h-[78vh] bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden pointer-events-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+              <p className="text-xs uppercase tracking-wider text-slate-400">Live Logs</p>
+              <button
+                onClick={() => setShowLogs(false)}
+                className="text-xs text-slate-400 hover:text-slate-200"
+              >
+                Close
+              </button>
+            </div>
+            <div className="p-4 h-full overflow-hidden">
+              <InteractionLog
+                events={logEvents}
+                onClear={() => setLogEvents([])}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {showPreMadeAgents && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-2xl h-[80vh] bg-slate-950 rounded-xl shadow-2xl overflow-hidden">
-            <PreMadeAgents
-              publicKey={keypair?.publicKey}
-              secretKey={keypair?.secret}
-              apiUrl={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
-              onWalletLoaded={setKeypair}
-              onClose={() => setShowPreMadeAgents(false)}
-            />
+          <div className="w-full max-w-6xl h-[88vh] bg-slate-950 rounded-2xl shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-2">
+            <div className="h-full border-r border-slate-800">
+              <PreMadeAgents
+                publicKey={keypair?.publicKey}
+                secretKey={keypair?.secret}
+                apiUrl={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
+                onWalletLoaded={setKeypair}
+                onLog={pushLog}
+                onClose={() => setShowPreMadeAgents(false)}
+              />
+            </div>
+            <div className="h-full p-4 flex flex-col">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800">
+                <p className="text-xs uppercase tracking-wider text-slate-400">Live Logs</p>
+                <button
+                  onClick={() => setShowLogs(prev => !prev)}
+                  className="text-xs text-slate-400 hover:text-slate-200"
+                >
+                  {showLogs ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto pt-3">
+                {showLogs ? (
+                  <InteractionLog
+                    events={logEvents}
+                    onClear={() => setLogEvents([])}
+                  />
+                ) : (
+                  <div className="text-xs text-slate-500 px-3">Logs hidden</div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

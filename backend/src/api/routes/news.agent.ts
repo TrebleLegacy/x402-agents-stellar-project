@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { ChatOpenAI } from '@langchain/openai';
 import { logger } from '../../utils/logger';
-import { x402Service } from '../../services/x402Service';
-import { requirePayment } from '../middlewares/requirePayment';
+import { createX402ServerFromEnv } from '../../sdk/x402/server';
 
 const router = Router();
 const llm = new ChatOpenAI({ modelName: 'gpt-4-turbo', temperature: 0.7 });
+const x402 = createX402ServerFromEnv();
 
 interface NewsQuery {
   category?: string;
@@ -84,47 +84,48 @@ Make the articles realistic, current, and relevant to ${category}. Relevance sco
 
 router.post(
   '/feed',
-  requirePayment({
-    requiredAmount: '0.03',
-    asset: 'USDC',
+  x402.wrapEndpoint({
+    price: '0.03',
+    asset: 'XLM',
     description: 'News Feed - Curated News & Articles',
-  }),
-  async (req, res, _next) => {
-    try {
-      const { query, publicKey } = req.body as {
-        query: NewsQuery;
-        publicKey: string;
-      };
+    handler: async (req, res) => {
+      try {
+        const { query, publicKey } = req.body as {
+          query: NewsQuery;
+          publicKey: string;
+        };
 
-      logger.info(
-        `[NewsAgent] Processing news feed request for: ${query.category}`
-      );
+        logger.info(
+          `[NewsAgent] Processing news feed request for: ${query.category}`
+        );
 
-      const category = query.category || 'blockchain';
-      const limit = Math.min(query.limit || 5, 10);
+        const category = query.category || 'blockchain';
+        const limit = Math.min(query.limit || 5, 10);
 
-      const { articles, reasoning } = await generateLLMArticles(category, limit);
+        const { articles, reasoning } = await generateLLMArticles(category, limit);
 
-      const response: NewsResponse = {
-        success: true,
-        data: {
-          category: query.category || 'blockchain',
-          articles,
-          timestamp: Date.now(),
-          reasoning,
-        },
-      };
+        const response: NewsResponse = {
+          success: true,
+          data: {
+            category: query.category || 'blockchain',
+            articles,
+            timestamp: Date.now(),
+            reasoning,
+          },
+        };
 
-      logger.info(`[NewsAgent] Feed sent to: ${publicKey}`);
-      res.json(response);
-    } catch (error) {
-      logger.error(`[NewsAgent] Error: ${error instanceof Error ? error.message : String(error)}`);
-      res.status(500).json({
-        success: false,
-        error: 'Internal server error',
-      } as NewsResponse);
-    }
-  }
+        logger.info(`[NewsAgent] Feed sent to: ${publicKey}`);
+        return response;
+      } catch (error) {
+        logger.error(`[NewsAgent] Error: ${error instanceof Error ? error.message : String(error)}`);
+        res.status(500);
+        return {
+          success: false,
+          error: 'Internal server error',
+        } as NewsResponse;
+      }
+    },
+  })
 );
 
 export default router;

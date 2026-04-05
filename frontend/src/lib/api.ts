@@ -1,15 +1,18 @@
 import axios, { AxiosInstance } from 'axios';
 import { X402PaymentClient, PaymentSignatureData } from './x402Client';
 import {
-  AgentQueryRequest,
+  AgentTraceEvent,
   AgentQueryResponse,
+  AgentDebugInfo,
   PaymentInstructions,
+  InteractionLogEvent,
 } from '@/types/agent';
 
 export class AgentAPIClient {
   private client: AxiosInstance;
   private paymentClient: X402PaymentClient;
   private userKeypair: { publicKey: string; secret: string } | null = null;
+  private onLog?: (event: InteractionLogEvent) => void;
 
   constructor(baseURL: string, network: 'testnet' | 'mainnet' = 'testnet') {
     this.client = axios.create({
@@ -23,6 +26,16 @@ export class AgentAPIClient {
 
   setKeypair(publicKey: string, secret: string): void {
     this.userKeypair = { publicKey, secret };
+  }
+
+  setLogger(callback?: (event: InteractionLogEvent) => void): void {
+    this.onLog = callback;
+  }
+
+  private emitLog(event: InteractionLogEvent): void {
+    if (this.onLog) {
+      this.onLog(event);
+    }
   }
 
   private async buildAndSignPayment(
@@ -49,43 +62,255 @@ export class AgentAPIClient {
     return this.paymentClient.createPaymentSignatureHeader(signatureData);
   }
 
+  private normalizeAgentResponse(
+    data: any,
+    options?: {
+      trace?: AgentTraceEvent[];
+      paymentResponse?: Record<string, unknown>;
+    }
+  ): AgentQueryResponse {
+    const isSuccess = data?.status === 'success' || data?.success === true;
+    return {
+      session_id: data?.session_id || '',
+      response: data?.response || data?.message || '',
+      messages: data?.messages || [],
+      status: isSuccess ? 'success' : 'error',
+      error: isSuccess ? undefined : data?.error || data?.message || 'Unknown error',
+      trace: options?.trace || [],
+      agentDebug: (data?.debug || undefined) as AgentDebugInfo | undefined,
+      paymentResponse: options?.paymentResponse,
+    };
+  }
+
+  private parsePriceToAmount(price: unknown): string {
+    if (typeof price === 'number') {
+      return String(price);
+    }
+
+    if (typeof price === 'string') {
+      const trimmed = price.trim();
+      if (/^\$\d+(\.\d+)?$/.test(trimmed)) {
+        return trimmed.slice(1);
+      }
+      return trimmed;
+    }
+
+    if (price && typeof price === 'object' && 'amount' in (price as any)) {
+      const amount = (price as any).amount;
+      return typeof amount === 'string' ? amount : String(amount);
+    }
+
+    return '0.001';
+  }
+
   async queryAgent(
     query: string,
     sessionId?: string,
     destination?: string
   ): Promise<AgentQueryResponse> {
+    const trace: AgentTraceEvent[] = [
+      {
+        at: new Date().toISOString(),
+        stage: 'request_started',
+        detail: 'Sending initial agent query request',
+        payload: { sessionId, queryPreview: query.slice(0, 120) },
+      },
+    ];
+
+    this.emitLog({
+      at: new Date().toISOString(),
+      source: 'agent',
+      stage: 'request_started',
+      detail: 'Agent query submitted',
+      payload: { sessionId, queryPreview: query.slice(0, 120) },
+    });
+
     try {
-      const response = await this.client.post<AgentQueryResponse>(
+      const response = await this.client.post(
         '/api/agent/query',
         { query, session_id: sessionId }
       );
-      return response.data;
+      trace.push({
+        at: new Date().toISOString(),
+        stage: 'request_succeeded',
+        detail: 'Agent query completed without paywall challenge',
+      });
+      this.emitLog({
+        at: new Date().toISOString(),
+        source: 'agent',
+        stage: 'request_succeeded',
+        detail: 'Agent query succeeded without payment',
+      });
+      return this.normalizeAgentResponse(response.data, { trace });
     } catch (error: any) {
       if (error.response?.status === 402) {
-        const instructions = error.response.data as PaymentInstructions;
+        const instructions = (error.response.data?.instructions ||
+          error.response.data) as PaymentInstructions;
+        const payTo = instructions?.payTo || destination;
 
-        if (!destination) {
+        trace.push({
+          at: new Date().toISOString(),
+          stage: 'paywall_received',
+          detail: 'Received x402 paywall challenge (402 Payment Required)',
+          payload: instructions,
+        });
+        this.emitLog({
+          at: new Date().toISOString(),
+          source: 'agent',
+          stage: 'paywall_received',
+          detail: 'Received 402 paywall instructions',
+          payload: instructions,
+        });
+
+        if (!payTo) {
+          trace.push({
+            at: new Date().toISOString(),
+            stage: 'request_failed',
+            detail: 'Paywall did not provide destination address',
+          });
+          this.emitLog({
+            at: new Date().toISOString(),
+            source: 'agent',
+            stage: 'request_failed',
+            detail: 'Paywall missing destination',
+          });
           throw new Error(
-            'Payment required. Please provide destination address.'
+            'Payment required but no destination was provided by server.'
           );
         }
 
+        const amount = this.parsePriceToAmount(instructions?.price);
+
+        trace.push({
+          at: new Date().toISOString(),
+          stage: 'payment_signing_started',
+          detail: 'Building and signing Stellar payment transaction',
+          payload: {
+            destination: payTo,
+            amount,
+            network: instructions?.network,
+            scheme: instructions?.scheme,
+          },
+        });
+        this.emitLog({
+          at: new Date().toISOString(),
+          source: 'agent',
+          stage: 'payment_signing_started',
+          detail: 'Signing payment for paywall',
+          payload: {
+            destination: payTo,
+            amount,
+            network: instructions?.network,
+            scheme: instructions?.scheme,
+          },
+        });
+
         const paymentHeader = await this.buildAndSignPayment(
-          destination,
-          '0.001',
-          instructions.price
+          payTo,
+          amount,
+          typeof instructions?.price === 'string' ? instructions.price : amount
         );
 
-        const retryResponse = await this.client.post<AgentQueryResponse>(
-          '/api/agent/query',
-          { query, session_id: sessionId },
-          {
-            headers: { 'Payment-Signature': paymentHeader },
-          }
-        );
+        trace.push({
+          at: new Date().toISOString(),
+          stage: 'payment_signing_completed',
+          detail: 'Payment transaction signed and encoded in Payment-Signature header',
+          payload: { headerLength: paymentHeader.length },
+        });
+        this.emitLog({
+          at: new Date().toISOString(),
+          source: 'agent',
+          stage: 'payment_signing_completed',
+          detail: 'Payment signature created',
+          payload: { headerLength: paymentHeader.length },
+        });
 
-        return retryResponse.data;
+        trace.push({
+          at: new Date().toISOString(),
+          stage: 'payment_retry_submitted',
+          detail: 'Retrying agent query with payment headers',
+        });
+        this.emitLog({
+          at: new Date().toISOString(),
+          source: 'agent',
+          stage: 'payment_retry_submitted',
+          detail: 'Retrying agent query with payment',
+        });
+
+        try {
+          const retryResponse = await this.client.post(
+            '/api/agent/query',
+            { query, session_id: sessionId },
+            {
+              headers: {
+                'Payment-Signature': paymentHeader,
+                ...(instructions?.network
+                  ? { 'X-402-Network': instructions.network }
+                  : {}),
+                ...(instructions?.scheme
+                  ? { 'X-402-Scheme': instructions.scheme }
+                  : {}),
+                ...(instructions?.facilitatorUrl
+                  ? { 'X-402-Facilitator': instructions.facilitatorUrl }
+                  : {}),
+              },
+            }
+          );
+
+          const paymentResponseHeader = retryResponse.headers?.['payment-response'];
+          const paymentResponse = paymentResponseHeader
+            ? this.paymentClient.parsePaymentResponse(paymentResponseHeader)
+            : undefined;
+
+          trace.push({
+            at: new Date().toISOString(),
+            stage: 'payment_retry_succeeded',
+            detail: 'Paywall payment accepted and protected agent response returned',
+            payload: paymentResponse,
+          });
+          this.emitLog({
+            at: new Date().toISOString(),
+            source: 'agent',
+            stage: 'payment_retry_succeeded',
+            detail: 'Payment accepted by agent',
+            payload: paymentResponse,
+          });
+
+          return this.normalizeAgentResponse(retryResponse.data, {
+            trace,
+            paymentResponse,
+          });
+        } catch (retryError: any) {
+          trace.push({
+            at: new Date().toISOString(),
+            stage: 'payment_retry_failed',
+            detail: 'Retry with payment failed',
+            payload: retryError?.response?.data || retryError?.message,
+          });
+          this.emitLog({
+            at: new Date().toISOString(),
+            source: 'agent',
+            stage: 'payment_retry_failed',
+            detail: 'Payment retry failed',
+            payload: retryError?.response?.data || retryError?.message,
+          });
+          throw retryError;
+        }
       }
+
+      trace.push({
+        at: new Date().toISOString(),
+        stage: 'request_failed',
+        detail: 'Initial request failed before paywall handling',
+        payload: error?.response?.data || error?.message,
+      });
+      this.emitLog({
+        at: new Date().toISOString(),
+        source: 'agent',
+        stage: 'request_failed',
+        detail: 'Agent query failed',
+        payload: error?.response?.data || error?.message,
+      });
       throw error;
     }
   }

@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'x402 Agent Frontend',
-  description: 'Configure and interact with AI agents using Stellar payments',
+  title: 'FORGE v2',
+  description: 'Trust-aware, competitive runtime for economically intelligent agents on Stellar',
 };
 
 export default function RootLayout({

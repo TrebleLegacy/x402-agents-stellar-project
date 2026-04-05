@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Database, AlertTriangle, Newspaper, Zap, ChevronRight, X } from 'lucide-react';
 import { SpecialistAgentClient } from '@/lib/specialistAgents';
+import { InteractionLogEvent } from '@/types/agent';
 
 interface PreMadeAgentsProps {
   publicKey?: string;
@@ -10,6 +11,7 @@ interface PreMadeAgentsProps {
   apiUrl: string;
   onClose?: () => void;
   onWalletLoaded?: (keypair: { publicKey: string; secret: string }) => void;
+  onLog?: (event: InteractionLogEvent) => void;
 }
 
 type AgentTab = 'defi' | 'security' | 'news';
@@ -61,6 +63,7 @@ export default function PreMadeAgents({
   apiUrl,
   onClose,
   onWalletLoaded,
+  onLog,
 }: PreMadeAgentsProps) {
   const [activeTab, setActiveTab] = useState<AgentTab>('defi');
   const [loading, setLoading] = useState(false);
@@ -71,6 +74,10 @@ export default function PreMadeAgents({
   const [walletLoaded, setWalletLoaded] = useState(false);
   
   const clientRef = useRef<SpecialistAgentClient>(new SpecialistAgentClient(apiUrl, 'testnet'));
+
+  useEffect(() => {
+    clientRef.current.setLogger(onLog);
+  }, [onLog]);
 
   useEffect(() => {
     if (propPublicKey && propSecretKey) {
@@ -111,6 +118,14 @@ export default function PreMadeAgents({
       const template = agentTemplates[activeTab];
       const preset = template.presets[presetIndex];
 
+      onLog?.({
+        at: new Date().toISOString(),
+        source: 'specialist',
+        stage: 'preset_selected',
+        detail: `Running ${template.name} preset`,
+        payload: preset,
+      });
+
       let response;
       if (activeTab === 'defi') {
         response = await clientRef.current.queryDeFiAgent(
@@ -134,6 +149,13 @@ export default function PreMadeAgents({
       setResult({
         success: false,
         error: error.message || 'Agent error',
+      });
+      onLog?.({
+        at: new Date().toISOString(),
+        source: 'specialist',
+        stage: 'preset_failed',
+        detail: 'Quick agent preset failed',
+        payload: error.message || 'Agent error',
       });
     } finally {
       setLoading(false);

@@ -21,6 +21,8 @@ interface X402PaymentInput {
   amount: string;
   assetContract: string;
   price: string;
+  assetCode?: string;
+  assetIssuer?: string;
 }
 
 interface X402SignatureData {
@@ -38,13 +40,18 @@ const getServer = (): Horizon.Server => {
   return new Horizon.Server(serverUrl);
 };
 
+const getNetworkPassphrase = (): string => {
+  const network = process.env.STELLAR_NETWORK || 'testnet';
+  return network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
+};
+
 export class X402PaymentBuilder {
   /**
    * Build an unsigned x402 payment transaction
    * This transaction can be passed to a client for signing
    */
   static async buildUnsignedTransaction(input: X402PaymentInput): Promise<string> {
-    const { sourcePublicKey, destinationAddress, amount, price } = input;
+    const { sourcePublicKey, destinationAddress, amount, price, assetCode, assetIssuer } = input;
     
     try {
       const server = getServer();
@@ -54,15 +61,19 @@ export class X402PaymentBuilder {
       // x402 works with any standard Stellar transaction
       const builder = new TransactionBuilder(sourceAccount, {
         fee: '10000',
-        networkPassphrase: Networks.TESTNET,
+        networkPassphrase: getNetworkPassphrase(),
       });
 
       // Add payment operation
+      const asset = assetCode && assetIssuer
+        ? new Asset(assetCode, assetIssuer)
+        : Asset.native();
+
       builder.addOperation(
         Operation.payment({
           destination: destinationAddress,
-          asset: Asset.native(),
-          amount: amount, // In XLM
+          asset,
+          amount: amount,
         })
       );
 
@@ -84,7 +95,7 @@ export class X402PaymentBuilder {
   static signTransaction(xdr: string, secretKey: string): X402SignatureData {
     try {
       const keypair = Keypair.fromSecret(secretKey);
-      const transaction = TransactionBuilder.fromXDR(xdr, Networks.TESTNET);
+      const transaction = TransactionBuilder.fromXDR(xdr, getNetworkPassphrase());
 
       // Sign the transaction
       transaction.sign(keypair);
