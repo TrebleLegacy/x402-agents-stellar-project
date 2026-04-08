@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Zap, Key, Wallet, LogOut, Copy } from 'lucide-react';
+import WalletManager from './WalletManager';
 
 interface WalletSidebarProps {
   onConnected: (publicKey: string, secretKey: string) => void;
@@ -23,12 +24,11 @@ export default function WalletSidebar({
   const [isConnected, setIsConnected] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const handleConnect = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!publicKey.trim() || !secretKey.trim()) return;
-
+  const handleKeypairSelected = (keypair: { publicKey: string; secret: string }) => {
+    setPublicKey(keypair.publicKey);
+    setSecretKey(keypair.secret);
     setIsConnected(true);
-    onConnected(publicKey.trim(), secretKey.trim());
+    onConnected(keypair.publicKey, keypair.secret);
   };
 
   const handleDisconnect = () => {
@@ -66,46 +66,17 @@ export default function WalletSidebar({
               Connect Identity
             </h2>
             <p className="text-xs text-slate-400">
-              Provide your Stellar Keypair to initialize the X402 Payment Agent.
+              Gerencie sua carteira Stellar para inicializar os pagamentos do Agente.
             </p>
           </div>
 
-          <form onSubmit={handleConnect} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">
-                PUBLIC KEY
-              </label>
-              <input
-                type="text"
-                value={publicKey}
-                onChange={(e) => setPublicKey(e.target.value)}
-                placeholder="G..."
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-white focus:border-emerald-500 focus:outline-none transition-colors"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">
-                SECRET KEY
-              </label>
-              <input
-                type="password"
-                value={secretKey}
-                onChange={(e) => setSecretKey(e.target.value)}
-                placeholder="S..."
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-white focus:border-emerald-500 focus:outline-none transition-colors"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full px-4 py-3 mt-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <Wallet className="w-4 h-4" />
-              Connect Wallet
-            </button>
-          </form>
+          <div className="w-full">
+            <WalletManager
+              onKeypairSelected={handleKeypairSelected}
+              isConfigured={isConnected}
+              selectedKeypair={publicKey ? { publicKey, secret: secretKey } : null}
+            />
+          </div>
         </div>
 
         <div className="text-center text-xs text-slate-600 mt-4">
