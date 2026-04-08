@@ -20,7 +20,7 @@ export class ContactRepository {
     const { data, error } = await supabase
       .from('contacts')
       .select('*')
-      .eq('owner_id', ownerId)
+      .eq('user_id', ownerId)
       .order('created_at', { ascending: false });
     
     if (error) {
@@ -34,7 +34,7 @@ export class ContactRepository {
     const { data, error } = await supabase
       .from('contacts')
       .select('*')
-      .eq('owner_id', ownerId)
+      .eq('user_id', ownerId)
       .eq('contact_name', contactName)
       .single();
 

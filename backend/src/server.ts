@@ -13,6 +13,7 @@ import actionsRouter from './api/routes/actions.router';
 import x402TestRouter from './api/routes/x402.test';
 import x402SdkRouter from './api/routes/x402.sdk.demo';
 import forgeRouter from './api/routes/forge';
+import networkRouter from './api/routes/network';
 import stellarTestRouter from './api/routes/stellar.test';
 import defiAgentRouter from './api/routes/defi.agent';
 import securityAgentRouter from './api/routes/security.agent';
@@ -108,6 +109,7 @@ app.use('/api/actions', actionsRouter);
 app.use('/api/x402', x402TestRouter);
 app.use('/api/x402-sdk', x402SdkRouter);
 app.use('/api/forge', forgeRouter);
+app.use('/api/network', networkRouter);
 app.use('/api/stellar', stellarTestRouter);
 
 // Specialized Agent Routes (with x402 payment requirement)

@@ -14,6 +14,7 @@ const sourceColor: Record<InteractionLogEvent['source'], string> = {
   specialist: 'text-sky-300',
   forge: 'text-amber-300',
   sdk: 'text-violet-300',
+  network: 'text-sky-200',
 };
 
 export default function InteractionLog({ events, onClear }: InteractionLogProps) {

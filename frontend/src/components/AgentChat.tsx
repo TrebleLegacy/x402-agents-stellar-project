@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Send, AlertCircle, Zap } from 'lucide-react';
-import { Message, AgentQueryResponse } from '@/types/agent';
+import { Message, AgentQueryResponse, InteractionLogEvent } from '@/types/agent';
 
 interface AgentChatProps {
   sessionId: string;
@@ -10,6 +10,10 @@ interface AgentChatProps {
   onSendMessage: (query: string) => Promise<AgentQueryResponse>;
   isLoading: boolean;
   isPaying: boolean;
+  autoMessage?: string;
+  onAutoMessageSent?: () => void;
+  logEvents?: InteractionLogEvent[];
+  showInlineLogs?: boolean;
 }
 
 export default function AgentChat({
@@ -18,11 +22,44 @@ export default function AgentChat({
   onSendMessage,
   isLoading,
   isPaying,
+  autoMessage,
+  onAutoMessageSent,
+  logEvents,
+  showInlineLogs,
 }: AgentChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const autoSentRef = useRef(false);
+
+  const timeline = useMemo(() => {
+    const messageItems = messages.map((message, index) => ({
+      kind: 'message' as const,
+      key: `msg-${index}-${message.timestamp || 'na'}`,
+      at: message.timestamp || new Date(0).toISOString(),
+      order: index,
+      message,
+    }));
+    const logItems =
+      showInlineLogs !== false && logEvents?.length
+        ? logEvents.map((log, index) => ({
+            kind: 'log' as const,
+            key: `log-${index}-${log.at}-${log.stage}`,
+            at: log.at || new Date(0).toISOString(),
+            order: index + messageItems.length,
+            log,
+          }))
+        : [];
+    return [...messageItems, ...logItems].sort((a, b) => {
+      const timeA = Date.parse(a.at) || 0;
+      const timeB = Date.parse(b.at) || 0;
+      if (timeA === timeB) {
+        return a.order - b.order;
+      }
+      return timeA - timeB;
+    });
+  }, [logEvents, messages, showInlineLogs]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -30,15 +67,15 @@ export default function AgentChat({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, logEvents]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputValue.trim()) return;
+  const submitMessage = async (content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return;
 
     const userMessage: Message = {
       role: 'user',
-      content: inputValue,
+      content: trimmed,
       timestamp: new Date().toISOString(),
     };
 
@@ -47,7 +84,7 @@ export default function AgentChat({
     setError(null);
 
     try {
-      const response = await onSendMessage(inputValue);
+      const response = await onSendMessage(trimmed);
 
       if (response.status === 'success') {
         const assistantMessage: Message = {
@@ -72,6 +109,27 @@ export default function AgentChat({
     }
   };
 
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitMessage(inputValue);
+  };
+
+  useEffect(() => {
+    if (
+      autoSentRef.current ||
+      !autoMessage ||
+      !sessionId ||
+      messages.length > 0 ||
+      isLoading ||
+      isPaying
+    ) {
+      return;
+    }
+    autoSentRef.current = true;
+    onAutoMessageSent?.();
+    void submitMessage(autoMessage);
+  }, [autoMessage, isLoading, isPaying, messages.length, onAutoMessageSent, sessionId]);
+
   return (
     <div className="flex flex-col h-full bg-slate-950">
       <div className="flex flex-col gap-1 px-6 py-4 border-b border-slate-800 bg-slate-900/50">
@@ -90,7 +148,7 @@ export default function AgentChat({
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-4 flex flex-col">
-        {messages.length === 0 ? (
+        {timeline.length === 0 ? (
           <div className="flex items-center justify-center h-full flex-col gap-4 text-slate-400">
             <div className="text-center">
               <p className="text-sm">Start a conversation with {agentName}</p>
@@ -99,77 +157,100 @@ export default function AgentChat({
           </div>
         ) : (
           <>
-            {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                    msg.role === 'user'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-800 text-slate-100'
-                  }`}
-                >
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                    {msg.content}
-                  </p>
-
-                  {msg.role === 'assistant' && (msg.trace?.length || msg.agentDebug) ? (
-                    <div className="mt-3 pt-3 border-t border-slate-700/70 space-y-2">
-                      {msg.trace?.length ? (
-                        <details className="bg-slate-900/60 rounded border border-slate-700">
-                          <summary className="px-3 py-2 text-xs text-emerald-300 cursor-pointer font-medium">
-                            Execution Trace
-                          </summary>
-                          <div className="px-3 pb-3 space-y-2">
-                            {msg.trace.map((event, traceIdx) => (
-                              <div
-                                key={traceIdx}
-                                className="text-xs text-slate-300 bg-slate-950/70 rounded border border-slate-800 p-2 space-y-1"
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="font-semibold text-emerald-400">
-                                    {event.stage}
-                                  </span>
-                                  <span className="text-slate-500">
-                                    {new Date(event.at).toLocaleTimeString()}
-                                  </span>
-                                </div>
-                                <p>{event.detail}</p>
-                                {event.payload !== undefined && (
-                                  <pre className="text-[11px] text-slate-400 whitespace-pre-wrap break-words bg-slate-950 p-2 rounded border border-slate-800 overflow-x-auto">
-                                    {JSON.stringify(event.payload, null, 2)}
-                                  </pre>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </details>
-                      ) : null}
-
-                      {msg.agentDebug ? (
-                        <details className="bg-slate-900/60 rounded border border-slate-700">
-                          <summary className="px-3 py-2 text-xs text-blue-300 cursor-pointer font-medium">
-                            Agent Reasoning Snapshot
-                          </summary>
-                          <div className="px-3 pb-3">
-                            <pre className="text-[11px] text-slate-300 whitespace-pre-wrap break-words bg-slate-950 p-2 rounded border border-slate-800 overflow-x-auto">
-                              {JSON.stringify(msg.agentDebug, null, 2)}
-                            </pre>
-                          </div>
-                        </details>
-                      ) : null}
+            {timeline.map((item) => (
+              item.kind === 'log' ? (
+                <div key={item.key} className="flex justify-center">
+                  <div className="w-full max-w-md px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-xs text-slate-300">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-slate-500 uppercase">{item.log.source}</span>
+                      <span className="text-[10px] text-slate-500">
+                        {new Date(item.log.at).toLocaleTimeString()}
+                      </span>
                     </div>
-                  ) : null}
-
-                  {msg.timestamp && (
-                    <p className="text-xs mt-1 opacity-70">
-                      {new Date(msg.timestamp).toLocaleTimeString()}
-                    </p>
-                  )}
+                    <div className="text-slate-200 font-medium">{item.log.stage}</div>
+                    <div className="text-slate-400">{item.log.detail}</div>
+                    {item.log.payload !== undefined && (
+                      <details className="mt-1">
+                        <summary className="text-[10px] text-slate-500 cursor-pointer">payload</summary>
+                        <pre className="text-[10px] text-slate-400 whitespace-pre-wrap break-words bg-slate-950/60 p-2 rounded border border-slate-800 overflow-x-auto">
+                          {JSON.stringify(item.log.payload, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div
+                  key={item.key}
+                  className={`flex ${item.message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                      item.message.role === 'user'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-800 text-slate-100'
+                    }`}
+                  >
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                      {item.message.content}
+                    </p>
+
+                    {item.message.role === 'assistant' && (item.message.trace?.length || item.message.agentDebug) ? (
+                      <div className="mt-3 pt-3 border-t border-slate-700/70 space-y-2">
+                        {item.message.trace?.length ? (
+                          <details className="bg-slate-900/60 rounded border border-slate-700">
+                            <summary className="px-3 py-2 text-xs text-emerald-300 cursor-pointer font-medium">
+                              Execution Trace
+                            </summary>
+                            <div className="px-3 pb-3 space-y-2">
+                              {item.message.trace.map((event, traceIdx) => (
+                                <div
+                                  key={traceIdx}
+                                  className="text-xs text-slate-300 bg-slate-950/70 rounded border border-slate-800 p-2 space-y-1"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-semibold text-emerald-400">
+                                      {event.stage}
+                                    </span>
+                                    <span className="text-slate-500">
+                                      {new Date(event.at).toLocaleTimeString()}
+                                    </span>
+                                  </div>
+                                  <p>{event.detail}</p>
+                                  {event.payload !== undefined && (
+                                    <pre className="text-[11px] text-slate-400 whitespace-pre-wrap break-words bg-slate-950 p-2 rounded border border-slate-800 overflow-x-auto">
+                                      {JSON.stringify(event.payload, null, 2)}
+                                    </pre>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        ) : null}
+
+                        {item.message.agentDebug ? (
+                          <details className="bg-slate-900/60 rounded border border-slate-700">
+                            <summary className="px-3 py-2 text-xs text-blue-300 cursor-pointer font-medium">
+                              Agent Reasoning Snapshot
+                            </summary>
+                            <div className="px-3 pb-3">
+                              <pre className="text-[11px] text-slate-300 whitespace-pre-wrap break-words bg-slate-950 p-2 rounded border border-slate-800 overflow-x-auto">
+                                {JSON.stringify(item.message.agentDebug, null, 2)}
+                              </pre>
+                            </div>
+                          </details>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {item.message.timestamp && (
+                      <p className="text-xs mt-1 opacity-70">
+                        {new Date(item.message.timestamp).toLocaleTimeString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )
             ))}
             <div ref={messagesEndRef} />
           </>

@@ -132,15 +132,15 @@ export default function ForgeRuntime({ apiUrl, onLog }: ForgeRuntimeProps) {
                 <span>Decision</span>
               </div>
               <p className="mt-2 text-slate-400">{result.decision?.selectedAgent}</p>
-              <p className="text-slate-500">Score: {result.decision?.score}</p>
+              <p className="text-slate-500">{result.decision?.selection?.notes || 'Selection complete'}</p>
             </div>
             <div className="bg-slate-900/50 border border-slate-700 rounded p-2">
               <div className="flex items-center gap-2 text-sky-300">
                 <Timer className="w-3 h-3" />
-                <span>Bid Snapshot</span>
+                <span>Selection Snapshot</span>
               </div>
               <pre className="mt-2 text-[11px] text-slate-400 whitespace-pre-wrap break-words">
-                {JSON.stringify(result.decision?.bid, null, 2)}
+                {JSON.stringify(result.decision?.selection, null, 2)}
               </pre>
             </div>
           </div>

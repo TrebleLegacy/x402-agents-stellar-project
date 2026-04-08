@@ -176,6 +176,11 @@ export const toolDefinitions = [
   },
 ];
 
+const isMissingTableError = (error: any): boolean => {
+  const message = String(error?.message || error || '').toLowerCase();
+  return message.includes('could not find the table') || (message.includes('relation') && message.includes('does not exist'));
+};
+
 /**
  * Execute a tool function
  */
@@ -417,49 +422,93 @@ async function executeAddContact(input: any): Promise<string> {
 async function executeListContacts(input: any): Promise<string> {
   try {
     logger.debug(`Tool: Listing contacts from wallets table for user ${input.user_id}`);
-
-    const { data: wallets, error } = await supabase
-      .from("wallets")
-      .select("id, name, public_key, session_id, created_at")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      throw new Error(error.message || "Failed to fetch wallets");
+    let wallets = null;
+    let walletsError = null;
+    
+    try {
+      const result = await supabase
+        .from("wallets")
+        .select("id, name, public_key, session_id, created_at")
+        .order("created_at", { ascending: false });
+      wallets = result.data;
+      walletsError = result.error;
+    } catch (err: any) {
+      walletsError = err;
     }
 
-    const sessionIds = (wallets || []).map((w: any) => w.session_id).filter(Boolean);
-    const { data: sessions } = await supabase
-      .from("agent_sessions")
-      .select("session_id, user_id, email")
-      .in("session_id", sessionIds);
+    if (walletsError && !isMissingTableError(walletsError)) {
+      throw new Error(walletsError.message || "Failed to fetch wallets");
+    }
 
-    const sessionById = new Map<string, any>();
-    (sessions || []).forEach((s: any) => sessionById.set(s.session_id, s));
+    if (!walletsError && wallets) {
+      const sessionIds = (wallets || []).map((w: any) => w.session_id).filter(Boolean);
+      const { data: sessions } = await supabase
+        .from("agent_sessions")
+        .select("session_id, user_id, email")
+        .in("session_id", sessionIds);
 
-    const normalizedContacts = (wallets || [])
-      .filter((w: any) => {
-        // If user_id is provided, don't include the user's own wallet in contacts
-        if (!input.user_id) return true;
-        const owner = sessionById.get(w.session_id);
-        return owner?.user_id !== input.user_id;
-      })
-      .map((w: any, idx: number) => ({
-        ...(() => {
+      const sessionById = new Map<string, any>();
+      (sessions || []).forEach((s: any) => sessionById.set(s.session_id, s));
+
+      const normalizedContacts = (wallets || [])
+        .filter((w: any) => {
+          if (!input.user_id) return true;
           const owner = sessionById.get(w.session_id);
-          const emailName = owner?.email ? String(owner.email).split("@")[0] : undefined;
-          return {
-            id: w.id,
-            contact_name: w.name || emailName || `wallet_${idx + 1}`,
-            public_key: w.public_key,
-          };
-        })(),
+          return owner?.user_id !== input.user_id;
+        })
+        .map((w: any, idx: number) => ({
+          ...(() => {
+            const owner = sessionById.get(w.session_id);
+            const emailName = owner?.email ? String(owner.email).split("@")[0] : undefined;
+            return {
+              id: w.id,
+              contact_name: w.name || emailName || `wallet_${idx + 1}`,
+              public_key: w.public_key,
+            };
+          })(),
+        }));
+
+      return JSON.stringify({
+        success: true,
+        contact_count: normalizedContacts.length,
+        contacts: normalizedContacts,
+        message: `Found ${normalizedContacts.length} wallet contacts`,
+      });
+    }
+
+    let contacts = null;
+    let contactsError = null;
+
+    try {
+      const result = await supabase
+        .from("contacts")
+        .select("*");
+      contacts = result.data;
+      contactsError = result.error;
+    } catch (err: any) {
+      contactsError = err;
+    }
+
+    if (contactsError && !isMissingTableError(contactsError)) {
+      throw new Error(contactsError.message || "Failed to fetch contacts");
+    }
+
+    const normalizedContacts = (contacts || [])
+      .filter((contact: any) => {
+        if (!input.user_id) return true;
+        return contact.owner_id === input.user_id || contact.user_id === input.user_id;
+      })
+      .map((contact: any, idx: number) => ({
+        id: contact.id || `${idx + 1}`,
+        contact_name: contact.contact_name || contact.name || `contact_${idx + 1}`,
+        public_key: contact.stellar_public_key || contact.public_key,
       }));
 
     return JSON.stringify({
       success: true,
       contact_count: normalizedContacts.length,
       contacts: normalizedContacts,
-      message: `Found ${normalizedContacts.length} wallet contacts`,
+      message: normalizedContacts.length ? `Found ${normalizedContacts.length} contacts` : "No contacts found",
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -477,12 +526,21 @@ async function executeListWalletsAndContacts(): Promise<string> {
   try {
     logger.debug("Tool: Listing all wallets with contacts");
 
-    const { data: wallets, error: walletsError } = await supabase
-      .from("wallets")
-      .select("*")
-      .order("created_at", { ascending: false });
+    let wallets = null;
+    let walletsError = null;
 
-    if (walletsError) {
+    try {
+      const result = await supabase
+        .from("wallets")
+        .select("*")
+        .order("created_at", { ascending: false });
+      wallets = result.data;
+      walletsError = result.error;
+    } catch (err: any) {
+      walletsError = err;
+    }
+
+    if (walletsError && !isMissingTableError(walletsError)) {
       throw new Error(walletsError.message);
     }
 
@@ -510,12 +568,16 @@ async function executeListWalletsAndContacts(): Promise<string> {
     (sessions || []).forEach((s: any) => sessionById.set(s.session_id, s));
 
     let contacts: any[] = [];
-    const { data: contactsByOwner, error: contactsOwnerError } = await supabase
-      .from("contacts")
-      .select("*");
+    try {
+      const { data: contactsByOwner, error: contactsOwnerError } = await supabase
+        .from("contacts")
+        .select("*");
 
-    if (!contactsOwnerError) {
-      contacts = contactsByOwner || [];
+      if (!contactsOwnerError) {
+        contacts = contactsByOwner || [];
+      }
+    } catch {
+      // Ignora erro se 'contacts' tabela não existir
     }
 
     const formattedWallets = wallets.map((wallet: any, index: number) => {

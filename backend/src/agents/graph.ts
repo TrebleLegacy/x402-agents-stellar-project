@@ -527,6 +527,91 @@ Digite \`entendi\` para confirmar que guardou sua chave privada com segurança.`
         return state;
       }
 
+      if (state.action_type === ActionType.GET_BALANCE) {
+        const publicKey = state.session_data?.public_key || state.wallet_info?.publicKey;
+
+        if (!publicKey) {
+          state.success = false;
+          state.response_message = 'Você precisa entrar em uma wallet antes de consultar o saldo.';
+        } else {
+          const toolResultRaw = await executeTool("get_balance", {
+            public_key: publicKey,
+          });
+
+          let toolResult: any;
+          try {
+            toolResult = JSON.parse(toolResultRaw);
+          } catch {
+            toolResult = { success: false, error: "Failed to parse tool response" };
+          }
+
+          if (!toolResult.success) {
+            state.response_message = `Não consegui consultar o saldo agora: ${toolResult.error || 'erro desconhecido'}`;
+            state.success = false;
+          } else {
+            const asset = toolResult.asset || 'XLM';
+            const balance = toolResult.balance ?? toolResult.amount ?? '0';
+            state.response_message = `Saldo atual: ${balance} ${asset}.`;
+            state.success = true;
+          }
+        }
+
+        await this.repository.saveMessage(
+          state.session_id,
+          "assistant",
+          state.response_message
+        );
+        await this.repository.saveState(state.session_id, state);
+        return state;
+      }
+
+      if (state.action_type === ActionType.GET_HISTORY) {
+        const publicKey = state.session_data?.public_key || state.wallet_info?.publicKey;
+
+        if (!publicKey) {
+          state.success = false;
+          state.response_message = 'Você precisa entrar em uma wallet antes de consultar o histórico.';
+        } else {
+          const toolResultRaw = await executeTool("get_transaction_history", {
+            public_key: publicKey,
+            limit: 10,
+          });
+
+          let toolResult: any;
+          try {
+            toolResult = JSON.parse(toolResultRaw);
+          } catch {
+            toolResult = { success: false, error: "Failed to parse tool response" };
+          }
+
+          if (!toolResult.success) {
+            state.response_message = `Não consegui consultar o histórico agora: ${toolResult.error || 'erro desconhecido'}`;
+            state.success = false;
+          } else {
+            const transactions = toolResult.transactions || [];
+            if (transactions.length === 0) {
+              state.response_message = 'Nenhuma transação recente encontrada.';
+            } else {
+              const formatted = transactions.map((tx: any, idx: number) => {
+                const date = tx.date ? new Date(tx.date).toLocaleString('pt-BR') : 'data desconhecida';
+                const hash = tx.hash ? String(tx.hash).slice(0, 12) : 'hash';
+                return `${idx + 1}. ${tx.type || 'tx'} - ${date} - ${hash}`;
+              }).join('\n');
+              state.response_message = `Últimas transações:\n${formatted}`;
+            }
+            state.success = true;
+          }
+        }
+
+        await this.repository.saveMessage(
+          state.session_id,
+          "assistant",
+          state.response_message
+        );
+        await this.repository.saveState(state.session_id, state);
+        return state;
+      }
+
       if (state.action_type === ActionType.BUILD_PAYMENT) {
         const parsed = this.parsePaymentRequest(state.current_input);
 
@@ -575,16 +660,18 @@ Digite \`entendi\` para confirmar que guardou sua chave privada com segurança.`
               : new AIMessage({ content: m.content })
           );
 
-        const systemMessage = `You are a helpful AI assistant for Stellar blockchain payments.
-Help users manage their blockchain accounts, send payments, view balances, and manage contacts.
-Always respond in Portuguese (Brazilian Portuguese preferred).
-      Do not use emojis in your responses.
-Be concise and friendly.
+const systemMessage = `You are an AI assistant orchestrating an Agentic Network powered by Stellar blockchain payments.
+You help users manage blockchain accounts, send payments, view balances, AND you also interface with an external network of specialist API Agents (like DeFi, Market Data, News, GitHub, etc).
+When a user asks for real-time data, market info, or specialized tasks, do NOT apologize or say you cannot access it. Instead, acknowledge the request, analyze their parameters, and confirm that their query has been routed to the specialist Agent Network attached to their dashboard.
 
-You have access to these tools for Stellar operations:
+Always respond in Portuguese (Brazilian Portuguese preferred).
+Do not use emojis in your responses.
+Be concise, professional, and friendly.
+
+You have direct backend access to these tools for local Stellar operations:
 ${ALL_TOOLS.map((t) => `- ${t.name}: ${t.description}`).join("\n")}
 
-When users request information or actions, respond with concrete results or clear next input needed.`;
+Respond with concrete insights or clear next steps. Se o assunto for de mercado/desenvolvedor, trate como algo cujo processamento já foi engatilhado visualmente no painel do usuário.`;
 
         // Invoke LLM
         const response = await this.llm.invoke([
@@ -648,7 +735,7 @@ When users request information or actions, respond with concrete results or clea
     try {
       const messages = [
         new HumanMessage({
-          content: `You are a helpful Stellar blockchain assistant. Respond in Portuguese. Do not use emojis.`,
+          content: `You are a specialized agent controlling a Stellar blockchain application and an API Agent Network. Respond in Portuguese, do not use emojis, and assume any external API request is being displayed graphically to the user in their dashboard.`,
         }),
         ...previousMessages.slice(-3).map((m) =>
           m.role === "user"
