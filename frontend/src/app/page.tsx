@@ -8,6 +8,10 @@ import { AgentQueryResponse } from '@/types/agent';
 import { AgentAPIClient } from '@/lib/api';
 import AutoDebitModal from '@/components/AutoDebitModal';
 import ProviderSettingsModal, { EngineProvider } from '@/components/ProviderSettingsModal';
+import MultiWalletModal from '@/components/MultiWalletModal';
+import VaultModal from '@/components/VaultModal';
+import { VaultPayload } from '@/lib/vault';
+import { invoke } from '@tauri-apps/api/core';
 
 export default function Home() {
   const [contractId, setContractId] = useState<string | null>(null);
@@ -17,6 +21,14 @@ export default function Home() {
   const [apiClient, setApiClient] = useState<AgentAPIClient | null>(null);
   const [isAutoDebitModalOpen, setIsAutoDebitModalOpen] = useState(false);
   const [isProviderModalOpen, setIsProviderModalOpen] = useState(false);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  
+  // AES-256 Vault InMemory State
+  const [isVaultModalOpen, setIsVaultModalOpen] = useState(false);
+  const [vaultPassword, setVaultPassword] = useState<string | null>(null);
+  const [activeVault, setActiveVault] = useState<VaultPayload | null>(null);
+  const [pendingVaultCallback, setPendingVaultCallback] = useState<((p: string, v: VaultPayload) => void) | null>(null);
+
   const [engineProvider, setEngineProvider] = useState<EngineProvider>('forge');
   const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
 
@@ -51,8 +63,13 @@ export default function Home() {
     subscriptionsRef.current = subscriptions;
   }, [subscriptions]);
 
-  const handleWalletConnected = useCallback((publicKey: string, secretKey: string) => {
-    setContractId(publicKey); // Using contractId state to store public key for UI consistency
+  const getActiveLimits = () => {
+    return subscriptionsRef.current.reduce((acc, s) => ({ ...acc, [s.pubKey]: s.budgetLimit }), {} as Record<string, number>);
+  };
+
+  const handleWalletConnected = useCallback(async (publicKey: string, secretKey: string) => {
+    setContractId(publicKey); 
+    localStorage.setItem('forge_active_wallet', publicKey);
 
     // Initialize API client
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -61,8 +78,8 @@ export default function Home() {
 
     // Setup Cathedral Interceptors
     client.setBudgetResolver((pubKey) => {
-      const sub = subscriptionsRef.current.find(s => s.pubKey === pubKey);
-      return sub ? sub.budgetLimit : undefined;
+      const activeLimits = getActiveLimits();
+      return activeLimits[pubKey];
     });
 
     client.onPaymentDenied((pubKey, amount, limit) => {
@@ -73,6 +90,37 @@ export default function Home() {
 
     setApiClient(client);
   }, []);
+
+  React.useEffect(() => {
+    // 1. Instantiate the single API Client globally for all requests
+    const client = new AgentAPIClient(
+      process.env.NEXT_PUBLIC_AGENT_API_URL || 'http://localhost:8000',
+      'testnet'
+    );
+    
+    // Setup Cathedral Interceptors
+    client.setBudgetResolver((pubKey) => {
+      const activeLimits = getActiveLimits();
+      return activeLimits[pubKey];
+    });
+
+    client.onPaymentDenied((pubKey, amount, limit) => {
+      setSubscriptions((prev) => 
+        prev.map((s) => s.pubKey === pubKey ? { ...s, status: 'denied' } : s)
+      );
+    });
+
+    setApiClient(client);
+  }, []);
+
+  const requestVaultAccess = useCallback((callback: (pw: string, vault: VaultPayload) => void) => {
+     if (vaultPassword && activeVault) {
+        callback(vaultPassword, activeVault);
+     } else {
+        setPendingVaultCallback(() => callback);
+        setIsVaultModalOpen(true);
+     }
+  }, [vaultPassword, activeVault]);
 
   const handleWalletDisconnected = useCallback(() => {
     setContractId(null);
@@ -157,16 +205,25 @@ export default function Home() {
     (s) => s.status === 'active'
   ).length;
 
+  // Render Core App sem travas (UX Livre)
+
   return (
     <div className="h-full flex overflow-hidden bg-transparent">
       {/* Left: Wallet Sidebar */}
-      <aside className="w-72 flex-shrink-0 border-r border-slate-800">
+      <aside className="w-72 flex-shrink-0 border-r border-slate-800 relative z-20">
         <WalletSidebar
           onConnected={handleWalletConnected}
           onDisconnected={handleWalletDisconnected}
+          onLockApp={() => {
+             // Wipe memory RAM
+             setVaultPassword(null);
+             setActiveVault(null);
+             handleWalletDisconnected();
+          }}
+          currentPublicKey={contractId}
           monthlySpend={monthlySpend}
           activeServices={activeServices}
-          onOpenSettings={() => setIsAutoDebitModalOpen(true)}
+          onOpenSettings={() => setIsWalletModalOpen(true)}
           onOpenEngineSettings={() => setIsProviderModalOpen(true)}
           engineProvider={engineProvider}
         />
@@ -224,11 +281,43 @@ export default function Home() {
         isOpen={isProviderModalOpen}
         onClose={() => setIsProviderModalOpen(false)}
         currentProvider={engineProvider}
+        requestVaultAccess={requestVaultAccess}
         onSave={(provider, apiKey) => {
           setEngineProvider(provider);
           if (apiClient) {
             apiClient.setEngineConfig(provider, apiKey);
           }
+        }}
+      />
+
+      <MultiWalletModal
+        isOpen={isWalletModalOpen}
+        onClose={() => setIsWalletModalOpen(false)}
+        requestVaultAccess={requestVaultAccess}
+        onWalletActivated={(pub, sec) => {
+           handleWalletConnected(pub, sec);
+           setIsWalletModalOpen(false);
+        }}
+        onWalletDisconnected={() => {
+           handleWalletDisconnected();
+        }}
+        activePublicKey={contractId || undefined}
+      />
+      
+      <VaultModal
+        isOpen={isVaultModalOpen}
+        onClose={() => {
+           setIsVaultModalOpen(false);
+           setPendingVaultCallback(null);
+        }}
+        onUnlocked={(password, payload) => {
+           setVaultPassword(password);
+           setActiveVault(payload);
+           setIsVaultModalOpen(false);
+           if (pendingVaultCallback) {
+              pendingVaultCallback(password, payload);
+              setPendingVaultCallback(null);
+           }
         }}
       />
     </div>

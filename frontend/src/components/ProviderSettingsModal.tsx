@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Brain, Key, Shield, Info, Loader2 } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
+import { VaultManager, VaultPayload } from '../lib/vault';
 
 export type EngineProvider = 'forge' | 'byok';
 
@@ -10,6 +10,7 @@ interface ProviderSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentProvider: EngineProvider;
+  requestVaultAccess: (callback: (pw: string, vault: VaultPayload) => void) => void;
   onSave: (provider: EngineProvider, apiKey?: string) => void;
 }
 
@@ -17,6 +18,7 @@ export default function ProviderSettingsModal({
   isOpen,
   onClose,
   currentProvider,
+  requestVaultAccess,
   onSave,
 }: ProviderSettingsModalProps) {
   const [selected, setSelected] = useState<EngineProvider>(currentProvider);
@@ -29,24 +31,22 @@ export default function ProviderSettingsModal({
     if (isOpen) {
       setSelected(currentProvider);
       setError(null);
-      // Fetch existing API Key if user already configured BYOK
-      if (currentProvider === 'byok') {
+      // Fetch existing API Key se o usuário já configurou BYOK e a vault existe
+      if (currentProvider === 'byok' && VaultManager.hasVault()) {
         setLoadingInitial(true);
-        invoke<string>('get_from_keychain', { key: 'openai_key' })
-          .then((key) => {
-            if (key) setApiKey(key);
-          })
-          .catch(() => {
-            // No key found, completely fine.
-          })
-          .finally(() => setLoadingInitial(false));
+        requestVaultAccess((password, payload) => {
+           if (payload.apiKeys['openai']) {
+              setApiKey(payload.apiKeys['openai']);
+           }
+           setLoadingInitial(false);
+        });
       } else {
         setLoadingInitial(false);
       }
     }
-  }, [isOpen, currentProvider]);
+  }, [isOpen, currentProvider, requestVaultAccess]);
 
-  const handleSave = async () => {
+  const handleSave = () => {
     setIsSaving(true);
     setError(null);
     try {
@@ -56,17 +56,26 @@ export default function ProviderSettingsModal({
            setIsSaving(false);
            return;
         }
-        // Save to Apple Keychain!
-        await invoke('save_to_keychain', { key: 'openai_key', value: apiKey.trim() });
-        onSave('byok', apiKey.trim());
+        
+        requestVaultAccess(async (password, payload) => {
+           try {
+             payload.apiKeys['openai'] = apiKey.trim();
+             await VaultManager.encryptAndSave(password, payload);
+             onSave('byok', apiKey.trim());
+             onClose();
+           } catch (e: any) {
+             setError('Falha ao blindar chave: ' + e.message);
+           } finally {
+             setIsSaving(false);
+           }
+        });
       } else {
-        // Erase key just to be clean, or leave it. We'll leave it in case they switch back.
         onSave('forge');
+        onClose();
+        setIsSaving(false);
       }
-      onClose();
     } catch (e: any) {
       setError(e.toString());
-    } finally {
       setIsSaving(false);
     }
   };

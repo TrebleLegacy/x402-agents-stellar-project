@@ -37,25 +37,7 @@ export default function WalletManager({
     setTimeout(() => setCopied(null), 2000);
   };
 
-  useEffect(() => {
-    const checkKeychain = async () => {
-      try {
-        if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
-          const storedSecret = await invoke<string>('get_from_keychain', { key: 'primary_wallet' });
-          if (storedSecret) {
-            const keypair = StellarSdk.Keypair.fromSecret(storedSecret);
-            const wKeyPair = { publicKey: keypair.publicKey(), secret: keypair.secret() };
-            setGeneratedKeypair(wKeyPair);
-            setMode('view');
-            onKeypairSelected(wKeyPair);
-          }
-        }
-      } catch (e) {
-        console.log('No keychain data found or not in Tauri context.');
-      }
-    };
-    checkKeychain();
-  }, [onKeypairSelected]);
+  // Keychain removido daqui (delegado ao MultiWalletModal)
 
   const generateNewWallet = () => {
     try {
@@ -68,11 +50,6 @@ export default function WalletManager({
       setBalance(null);
       setMode('view');
       setError(null);
-      
-      // Save Native Enclave
-      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
-        invoke('save_to_keychain', { key: 'primary_wallet', secret: keypair.secret }).catch(console.error);
-      }
     } catch (err) {
       setError('Failed to generate wallet');
     }
@@ -94,11 +71,6 @@ export default function WalletManager({
       setBalance(null);
       setMode('view');
       setError(null);
-
-      // Save Native Enclave
-      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
-        invoke('save_to_keychain', { key: 'primary_wallet', secret: walletKeypair.secret }).catch(console.error);
-      }
     } catch (err) {
       setError('Invalid secret key. Please check and try again.');
     }
@@ -107,7 +79,7 @@ export default function WalletManager({
   const handleConfirmKeypair = () => {
     if (generatedKeypair) {
       onKeypairSelected(generatedKeypair);
-      setMode('menu');
+      setMode('menu'); // Return back to list / menu
     }
   };
 
