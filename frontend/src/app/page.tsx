@@ -6,6 +6,7 @@ import AgentChat from '@/components/AgentChat';
 import ServicesPanel, { Subscription } from '@/components/ServicesPanel';
 import { AgentQueryResponse } from '@/types/agent';
 import { AgentAPIClient } from '@/lib/api';
+import AutoDebitModal from '@/components/AutoDebitModal';
 
 export default function Home() {
   const [contractId, setContractId] = useState<string | null>(null);
@@ -13,16 +14,18 @@ export default function Home() {
   const [isPaying, setIsPaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [apiClient, setApiClient] = useState<AgentAPIClient | null>(null);
+  const [isAutoDebitModalOpen, setIsAutoDebitModalOpen] = useState(false);
 
   // Demo subscriptions — will be managed by subscription-manager in Phase 2
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
 
-  const handleWalletConnected = useCallback((id: string) => {
-    setContractId(id);
+  const handleWalletConnected = useCallback((publicKey: string, secretKey: string) => {
+    setContractId(publicKey); // Using contractId state to store public key for UI consistency
 
-    // Initialize API client with the smart account
+    // Initialize API client
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     const client = new AgentAPIClient(apiUrl, 'testnet');
+    client.setKeypair(publicKey, secretKey);
     setApiClient(client);
   }, []);
 
@@ -104,6 +107,7 @@ export default function Home() {
           onDisconnected={handleWalletDisconnected}
           monthlySpend={monthlySpend}
           activeServices={activeServices}
+          onOpenSettings={() => setIsAutoDebitModalOpen(true)}
         />
       </aside>
 
@@ -124,7 +128,7 @@ export default function Home() {
                 Connect your wallet to start
               </p>
               <p className="text-sm text-slate-600 max-w-sm">
-                Create or connect a smart wallet using Touch ID, then ask
+                Connect your Stellar Keypair, then ask
                 your agent to find and subscribe to APIs automatically.
               </p>
             </div>
@@ -140,6 +144,12 @@ export default function Home() {
           onRenew={handleRenewSubscription}
         />
       </aside>
+
+      <AutoDebitModal 
+        isOpen={isAutoDebitModalOpen} 
+        onClose={() => setIsAutoDebitModalOpen(false)} 
+        contractId={contractId} 
+      />
     </div>
   );
 }
