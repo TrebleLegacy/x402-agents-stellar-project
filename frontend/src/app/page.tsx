@@ -7,6 +7,7 @@ import ServicesPanel, { Subscription } from '@/components/ServicesPanel';
 import { AgentQueryResponse } from '@/types/agent';
 import { AgentAPIClient } from '@/lib/api';
 import AutoDebitModal from '@/components/AutoDebitModal';
+import ProviderSettingsModal, { EngineProvider } from '@/components/ProviderSettingsModal';
 
 export default function Home() {
   const [contractId, setContractId] = useState<string | null>(null);
@@ -15,6 +16,8 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [apiClient, setApiClient] = useState<AgentAPIClient | null>(null);
   const [isAutoDebitModalOpen, setIsAutoDebitModalOpen] = useState(false);
+  const [isProviderModalOpen, setIsProviderModalOpen] = useState(false);
+  const [engineProvider, setEngineProvider] = useState<EngineProvider>('forge');
   const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
 
   // Cathedral Engine: Subscriptions with cryptographic identifiers
@@ -164,6 +167,8 @@ export default function Home() {
           monthlySpend={monthlySpend}
           activeServices={activeServices}
           onOpenSettings={() => setIsAutoDebitModalOpen(true)}
+          onOpenEngineSettings={() => setIsProviderModalOpen(true)}
+          engineProvider={engineProvider}
         />
       </aside>
 
@@ -213,6 +218,18 @@ export default function Home() {
         }} 
         subscription={selectedSubscription}
         onSaveBudget={handleSaveBudget}
+      />
+
+      <ProviderSettingsModal
+        isOpen={isProviderModalOpen}
+        onClose={() => setIsProviderModalOpen(false)}
+        currentProvider={engineProvider}
+        onSave={(provider, apiKey) => {
+          setEngineProvider(provider);
+          if (apiClient) {
+            apiClient.setEngineConfig(provider, apiKey);
+          }
+        }}
       />
     </div>
   );

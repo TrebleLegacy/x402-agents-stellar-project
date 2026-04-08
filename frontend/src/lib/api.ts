@@ -15,6 +15,7 @@ export class AgentAPIClient {
   private onLog?: (event: InteractionLogEvent) => void;
   private budgetResolver?: (pubKey: string) => number | undefined;
   private paymentDeniedCallback?: (pubKey: string, amount: number, limit: number) => void;
+  private engineConfig: { provider: 'forge' | 'byok'; apiKey?: string } = { provider: 'forge' };
 
   constructor(baseURL: string, network: 'testnet' | 'mainnet' = 'testnet') {
     this.client = axios.create({
@@ -28,6 +29,10 @@ export class AgentAPIClient {
 
   setKeypair(publicKey: string, secret: string): void {
     this.userKeypair = { publicKey, secret };
+  }
+
+  setEngineConfig(provider: 'forge' | 'byok', apiKey?: string): void {
+    this.engineConfig = { provider, apiKey };
   }
 
   setLogger(callback?: (event: InteractionLogEvent) => void): void {
@@ -136,9 +141,17 @@ export class AgentAPIClient {
     });
 
     try {
+      const headers: Record<string, string> = {
+        'x-ai-provider': this.engineConfig.provider,
+      };
+      if (this.engineConfig.apiKey) {
+        headers['x-api-key'] = this.engineConfig.apiKey;
+      }
+
       const response = await this.client.post(
         '/api/agent/query',
-        { query, session_id: sessionId }
+        { query, session_id: sessionId },
+        { headers }
       );
       trace.push({
         at: new Date().toISOString(),
@@ -283,6 +296,8 @@ export class AgentAPIClient {
             { query, session_id: sessionId },
             {
               headers: {
+                'x-ai-provider': this.engineConfig.provider,
+                ...(this.engineConfig.apiKey ? { 'x-api-key': this.engineConfig.apiKey } : {}),
                 'Payment-Signature': paymentHeader,
                 ...(instructions?.network
                   ? { 'X-402-Network': instructions.network }
