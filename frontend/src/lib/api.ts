@@ -13,6 +13,8 @@ export class AgentAPIClient {
   private paymentClient: X402PaymentClient;
   private userKeypair: { publicKey: string; secret: string } | null = null;
   private onLog?: (event: InteractionLogEvent) => void;
+  private budgetResolver?: (pubKey: string) => number | undefined;
+  private paymentDeniedCallback?: (pubKey: string, amount: number, limit: number) => void;
 
   constructor(baseURL: string, network: 'testnet' | 'mainnet' = 'testnet') {
     this.client = axios.create({
@@ -30,6 +32,14 @@ export class AgentAPIClient {
 
   setLogger(callback?: (event: InteractionLogEvent) => void): void {
     this.onLog = callback;
+  }
+
+  setBudgetResolver(resolver: (pubKey: string) => number | undefined): void {
+    this.budgetResolver = resolver;
+  }
+
+  onPaymentDenied(callback: (pubKey: string, amount: number, limit: number) => void): void {
+    this.paymentDeniedCallback = callback;
   }
 
   private emitLog(event: InteractionLogEvent): void {
@@ -180,6 +190,36 @@ export class AgentAPIClient {
         }
 
         const amount = this.parsePriceToAmount(instructions?.price);
+
+        // --- Budget Interception (Cathedral Engine) ---
+        if (this.budgetResolver) {
+          const limit = this.budgetResolver(payTo);
+          const requiredAmt = parseFloat(amount);
+          
+          if (limit === undefined) {
+             console.warn(`[X402] No tracked API subscription found for ${payTo}.`);
+          } else if (requiredAmt > limit) {
+             trace.push({
+               at: new Date().toISOString(),
+               stage: 'request_failed',
+               detail: `Payment denied: Required ${requiredAmt} XLM exceeds limit of ${limit} XLM`,
+             });
+             this.emitLog({
+               at: new Date().toISOString(),
+               source: 'agent',
+               stage: 'request_failed',
+               detail: 'Payment denied by policy',
+               payload: { required: requiredAmt, limit }
+             });
+
+             if (this.paymentDeniedCallback) {
+                this.paymentDeniedCallback(payTo, requiredAmt, limit);
+             }
+
+             throw new Error(`InsufficientBudgetError: The requested payment of ${requiredAmt} XLM exceeds the isolated budget limit of ${limit} XLM for ${payTo}`);
+          }
+        }
+        // ----------------------------------------------
 
         trace.push({
           at: new Date().toISOString(),

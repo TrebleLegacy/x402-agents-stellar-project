@@ -15,9 +15,38 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [apiClient, setApiClient] = useState<AgentAPIClient | null>(null);
   const [isAutoDebitModalOpen, setIsAutoDebitModalOpen] = useState(false);
+  const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
 
-  // Demo subscriptions — will be managed by subscription-manager in Phase 2
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  // Cathedral Engine: Subscriptions with cryptographic identifiers
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([
+    {
+      id: 'sub_1',
+      pubKey: process.env.NEXT_PUBLIC_SERVER_STELLAR_ADDRESS || 'GDXKV7L...', 
+      service: 'Forge Native Agent',
+      plan: 'on-demand',
+      price: '$5.00',
+      budgetLimit: 2, // Rigorous Limit
+      totalSpent: 0,
+      status: 'active',
+    },
+    {
+      id: 'sub_2',
+      pubKey: 'GBBD47R6M...', 
+      service: 'Midjourney Image API',
+      plan: 'monthly',
+      price: '$30.00',
+      budgetLimit: 15, // Test limit
+      totalSpent: 12.50,
+      status: 'active',
+      renewsAt: new Date(Date.now() + 15 * 24 * 3600000).toISOString(),
+    }
+  ]);
+
+  // Keep a mutable ref for callbacks to evade stale closures
+  const subscriptionsRef = React.useRef(subscriptions);
+  React.useEffect(() => {
+    subscriptionsRef.current = subscriptions;
+  }, [subscriptions]);
 
   const handleWalletConnected = useCallback((publicKey: string, secretKey: string) => {
     setContractId(publicKey); // Using contractId state to store public key for UI consistency
@@ -26,6 +55,19 @@ export default function Home() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     const client = new AgentAPIClient(apiUrl, 'testnet');
     client.setKeypair(publicKey, secretKey);
+
+    // Setup Cathedral Interceptors
+    client.setBudgetResolver((pubKey) => {
+      const sub = subscriptionsRef.current.find(s => s.pubKey === pubKey);
+      return sub ? sub.budgetLimit : undefined;
+    });
+
+    client.onPaymentDenied((pubKey, amount, limit) => {
+      setSubscriptions((prev) => 
+        prev.map((s) => s.pubKey === pubKey ? { ...s, status: 'denied' } : s)
+      );
+    });
+
     setApiClient(client);
   }, []);
 
@@ -89,6 +131,20 @@ export default function Home() {
     );
   };
 
+  const handleSaveBudget = (id: string, budget: number) => {
+    setSubscriptions((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              budgetLimit: budget,
+              status: s.status === 'denied' && budget > s.budgetLimit ? 'active' : s.status,
+            }
+          : s
+      )
+    );
+  };
+
   const monthlySpend = subscriptions.reduce(
     (sum, s) => sum + s.totalSpent,
     0
@@ -99,7 +155,7 @@ export default function Home() {
   ).length;
 
   return (
-    <div className="h-screen flex overflow-hidden bg-slate-950">
+    <div className="h-full flex overflow-hidden bg-transparent">
       {/* Left: Wallet Sidebar */}
       <aside className="w-72 flex-shrink-0 border-r border-slate-800">
         <WalletSidebar
@@ -137,18 +193,26 @@ export default function Home() {
       </main>
 
       {/* Right: Services Panel */}
-      <aside className="w-80 flex-shrink-0 hidden lg:flex">
+      <aside className="w-80 flex-shrink-0 flex border-l border-slate-800">
         <ServicesPanel
           subscriptions={subscriptions}
           onToggle={handleToggleSubscription}
           onRenew={handleRenewSubscription}
+          onOpenLimit={(sub) => {
+            setSelectedSubscription(sub);
+            setIsAutoDebitModalOpen(true);
+          }}
         />
       </aside>
 
       <AutoDebitModal 
         isOpen={isAutoDebitModalOpen} 
-        onClose={() => setIsAutoDebitModalOpen(false)} 
-        contractId={contractId} 
+        onClose={() => {
+          setIsAutoDebitModalOpen(false);
+          setTimeout(() => setSelectedSubscription(null), 200);
+        }} 
+        subscription={selectedSubscription}
+        onSaveBudget={handleSaveBudget}
       />
     </div>
   );

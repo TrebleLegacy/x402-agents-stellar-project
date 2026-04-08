@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Zap, Copy, Eye, EyeOff, Plus, X, Wallet, Download, Upload, RefreshCw } from 'lucide-react';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import { StellarUtil } from '@/lib/stellar';
+import { invoke } from '@tauri-apps/api/core';
 
 interface WalletManagerProps {
   onKeypairSelected: (keypair: { publicKey: string; secret: string }) => void;
@@ -36,6 +37,26 @@ export default function WalletManager({
     setTimeout(() => setCopied(null), 2000);
   };
 
+  useEffect(() => {
+    const checkKeychain = async () => {
+      try {
+        if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+          const storedSecret = await invoke<string>('get_from_keychain', { key: 'primary_wallet' });
+          if (storedSecret) {
+            const keypair = StellarSdk.Keypair.fromSecret(storedSecret);
+            const wKeyPair = { publicKey: keypair.publicKey(), secret: keypair.secret() };
+            setGeneratedKeypair(wKeyPair);
+            setMode('view');
+            onKeypairSelected(wKeyPair);
+          }
+        }
+      } catch (e) {
+        console.log('No keychain data found or not in Tauri context.');
+      }
+    };
+    checkKeychain();
+  }, [onKeypairSelected]);
+
   const generateNewWallet = () => {
     try {
       const newKeypair = StellarSdk.Keypair.random();
@@ -47,6 +68,11 @@ export default function WalletManager({
       setBalance(null);
       setMode('view');
       setError(null);
+      
+      // Save Native Enclave
+      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+        invoke('save_to_keychain', { key: 'primary_wallet', secret: keypair.secret }).catch(console.error);
+      }
     } catch (err) {
       setError('Failed to generate wallet');
     }
@@ -68,6 +94,11 @@ export default function WalletManager({
       setBalance(null);
       setMode('view');
       setError(null);
+
+      // Save Native Enclave
+      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+        invoke('save_to_keychain', { key: 'primary_wallet', secret: walletKeypair.secret }).catch(console.error);
+      }
     } catch (err) {
       setError('Invalid secret key. Please check and try again.');
     }

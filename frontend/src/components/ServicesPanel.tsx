@@ -1,15 +1,17 @@
 'use client';
 
 import React from 'react';
-import { ExternalLink, Pause, Play, RefreshCw } from 'lucide-react';
+import { ExternalLink, Pause, Play, RefreshCw, AlertTriangle, Settings2 } from 'lucide-react';
 
 export interface Subscription {
   id: string;
+  pubKey: string;
   service: string;
   plan: 'on-demand' | 'monthly' | 'per-token';
   price: string;
+  budgetLimit: number;
   totalSpent: number;
-  status: 'active' | 'paused' | 'expired';
+  status: 'active' | 'paused' | 'expired' | 'denied';
   lastUsed?: string;
   renewsAt?: string;
   txHash?: string;
@@ -19,6 +21,7 @@ interface ServicesPanelProps {
   subscriptions: Subscription[];
   onToggle: (id: string) => void;
   onRenew: (id: string) => void;
+  onOpenLimit: (sub: Subscription) => void;
 }
 
 const planLabels: Record<Subscription['plan'], string> = {
@@ -34,6 +37,7 @@ export default function ServicesPanel({
   subscriptions,
   onToggle,
   onRenew,
+  onOpenLimit,
 }: ServicesPanelProps) {
   const activeCount = subscriptions.filter(
     (s) => s.status === 'active'
@@ -81,8 +85,10 @@ export default function ServicesPanel({
           subscriptions.map((sub) => (
             <div
               key={sub.id}
-              className={`bg-slate-900/60 border rounded-lg p-3 transition-all ${
-                sub.status === 'expired'
+              className={`bg-slate-900/60 border rounded-lg p-3 transition-all relative overflow-hidden ${
+                sub.status === 'denied'
+                  ? 'border-red-500/80 shadow-[0_0_15px_rgba(239,68,68,0.2)] bg-red-950/20'
+                  : sub.status === 'expired'
                   ? 'border-red-500/20 opacity-70'
                   : sub.status === 'paused'
                   ? 'border-amber-500/20 opacity-80'
@@ -98,7 +104,7 @@ export default function ServicesPanel({
                           ? 'bg-emerald-400'
                           : sub.status === 'paused'
                           ? 'bg-amber-400'
-                          : 'bg-red-400'
+                          : 'bg-red-500 animate-pulse'
                       }`}
                     />
                     <h3 className="text-sm font-medium text-white truncate">
@@ -140,7 +146,14 @@ export default function ServicesPanel({
                     </a>
                   )}
 
-                  {sub.status === 'expired' ? (
+                  {sub.status === 'denied' ? (
+                    <button
+                      onClick={() => onOpenLimit(sub)}
+                      className="px-2 py-1 bg-red-900/40 hover:bg-red-900/60 border border-red-500/30 text-red-300 text-xs rounded transition-colors"
+                    >
+                      Fix Limit
+                    </button>
+                  ) : sub.status === 'expired' ? (
                     <button
                       onClick={() => onRenew(sub.id)}
                       className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded transition-colors flex items-center gap-1"
@@ -149,22 +162,40 @@ export default function ServicesPanel({
                       Renew
                     </button>
                   ) : (
-                    <button
-                      onClick={() => onToggle(sub.id)}
-                      className="p-1.5 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors"
-                      title={
-                        sub.status === 'active' ? 'Pause' : 'Resume'
-                      }
-                    >
-                      {sub.status === 'active' ? (
-                        <Pause className="w-3.5 h-3.5" />
-                      ) : (
-                        <Play className="w-3.5 h-3.5" />
-                      )}
-                    </button>
+                    <>
+                      <button
+                        onClick={() => onOpenLimit(sub)}
+                        className="p-1.5 rounded hover:bg-slate-800 text-slate-500 hover:text-emerald-400 transition-colors"
+                        title="Adjust Budget Limit"
+                      >
+                        <Settings2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => onToggle(sub.id)}
+                        className="p-1.5 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors"
+                        title={
+                          sub.status === 'active' ? 'Pause Auto-Debit' : 'Resume Auto-Debit'
+                        }
+                      >
+                        {sub.status === 'active' ? (
+                          <Pause className="w-3.5 h-3.5" />
+                        ) : (
+                          <Play className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
+
+              {sub.status === 'denied' && (
+                <div className="mt-3 flex items-start gap-2 p-2 bg-red-500/10 rounded border border-red-500/20">
+                  <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-200">
+                    Payment denied: Required amount exceeds your blocked limit of <strong>{sub.budgetLimit} XLM</strong>. Adjust to resume service.
+                  </p>
+                </div>
+              )}
             </div>
           ))
         )}
