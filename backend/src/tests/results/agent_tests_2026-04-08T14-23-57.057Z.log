@@ -1,0 +1,70 @@
+=== Starting Agent Tests at 2026-04-08T14:23:57.057Z ===
+
+--- Testing DeFi Agent ---
+[DeFi] Success:
+{
+  "value": "10500000000",
+  "reasoning": "Uniswap, as one of the leading decentralized exchanges, typically maintains a high total value locked (TVL), which represents the amount of assets deposited in the protocol. Given its market position and the general scale of liquidity in DeFi protocols, a TVL around $10.5 billion is realistic. This estimate aligns with historical data trends observed in major DeFi protocols, which often hover in the multi-billion dollar range, especially for protocols facilitating large volumes of swaps and liquidity provision."
+}
+
+--- Testing News Agent ---
+[News] Success:
+{
+  "articles": [
+    {
+      "id": "1",
+      "title": "Bitcoin Surges Past $30,000 Amidst Market Optimism",
+      "description": "Bitcoin has crossed the $30,000 mark for the first time in 2023, spurred by increased institutional investment and positive market sentiment. Analysts suggest that the upcoming halving event and inflation concerns are key drivers behind the surge.",
+      "source": "CryptoNews",
+      "timestamp": 1775658263319,
+      "relevanceScore": 0.95
+    },
+    {
+      "id": "2",
+      "title": "EU Finalizes 'Markets in Crypto-Assets' Regulation, Impact on Bitcoin",
+      "description": "The European Union has finalized its comprehensive Markets in Crypto-Assets (MiCA) framework, setting out new regulatory standards for crypto assets, including Bitcoin. This regulation aims to enhance consumer protection and ensure market stability.",
+      "source": "BlockchainToday",
+      "timestamp": 1775658263319,
+      "relevanceScore": 0.92
+    }
+  ],
+  "reasoning": "The selected articles focus on two significant aspects of Bitcoin: its market performance and regulatory developments. These topics are highly relevant as they directly influence investor decisions and the broader adoption of Bitcoin."
+}
+
+--- Testing Security Agent ---
+[Security] Success:
+{
+  "findings": [
+    {
+      "id": "1",
+      "severity": "high",
+      "title": "Insecure Communication Protocol",
+      "description": "The use of non-HTTPS protocols for data transmission can expose the website to interception or alteration of data by attackers, possibly leading to loss of confidentiality or integrity of user-sensitive data."
+    }
+  ],
+  "reasoning": "Since I am unable to perform a real scan on the example URL and lack actual access or specific details about the website's technology stack, infrastructure, or security measures, I can hypothesize based on common web security issues that affect many sites. A common vulnerability often found in web applications is related to insecure communication protocols."
+}
+
+--- Testing Main Orchestrator Agent (AgentGraph) ---
+[Main Agent] Trying prompt: "Traga um resumo dos indicadores de mercado globais, focando em métricas essenciais como cripto"
+[Main Agent] Resulting State keys: session_id, current_input, detected_intent, action_type, session_data, messages, response_message, action_params, success
+[Main Agent] Response Message:
+Claro! Aqui está um resumo dos principais indicadores de mercado globais com foco em criptomoedas:
+
+1. **Capitalização de Mercado**: A capitalização de mercado total das criptomoedas é uma métrica essencial que indica o valor total de todas as criptomoedas em circulação. É calculada multiplicando o preço atual de cada moeda pela quantidade total em circulação.
+
+2. **Volume de Negociação**: Refere-se ao total de unidades de criptomoedas negociadas em um determinado período. Um alto volume de negociação pode indicar alta liquidez e interesse dos investidores.
+
+3. **Dominância do Bitcoin**: Esta métrica mostra a porcentagem da capitalização de mercado total que é representada pelo Bitcoin. É um indicador da posição do Bitcoin em relação a outras criptomoedas.
+
+4. **Índice de Medo e Ganância**: Este índice mede o sentimento do mercado em relação às criptomoedas, variando de medo extremo a ganância extrema. É baseado em fatores como volatilidade, volume de mercado, e tendências nas redes sociais.
+
+5. **Taxa de Hash do Bitcoin**: Refere-se ao poder computacional total usado para minerar e processar transações de Bitcoin. É um indicador da segurança e da saúde da rede Bitcoin.
+
+6. **Taxas de Transação**: As taxas pagas para processar transações na blockchain podem indicar o nível de congestionamento da rede. Taxas mais altas geralmente ocorrem durante períodos de alta demanda.
+
+Esses indicadores ajudam a compreender o estado atual do mercado de criptomoedas e podem ser visualizados em tempo real através de plataformas de análise de mercado.
+
+[Main Agent] Final Intent: general
+=== Tests Completed ===
+Results saved to /home/rodrigodog/x402-agents-stellar-project/backend/src/tests/results/agent_tests_2026-04-08T14-23-57.057Z.log

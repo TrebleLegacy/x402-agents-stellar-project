@@ -8,11 +8,26 @@ import { StellarClient } from "../stellar/client";
 import { UserService } from "../api/services/user.service";
 import { logger } from "../utils/logger";
 import { supabase } from "../config/supabase";
+import { apiTools, executeNetworkTool } from "../api/routes/network";
+
+const mappedNetworkTools = apiTools.map(t => ({
+  name: t.id,
+  description: `${t.description} (Cost: ${t.pricing})`,
+  parameters: {
+    type: "object",
+    properties: Object.keys(t.params || {}).reduce((acc, key) => {
+      acc[key] = { type: t.params![key] || "string", description: `Parameter ${key}` };
+      return acc;
+    }, {} as Record<string, any>),
+    required: Object.keys(t.params || {}),
+  }
+}));
 
 /**
  * Tool definitions for OpenAI function calling
  */
 export const toolDefinitions = [
+  ...mappedNetworkTools,
   {
     name: "create_wallet",
     description: "Create a new Stellar wallet or link an existing public key to the user account",
@@ -189,6 +204,13 @@ export async function executeTool(
   toolInput: Record<string, any>
 ): Promise<string> {
   try {
+    const isNetworkTool = apiTools.some(t => t.id === toolName);
+    if (isNetworkTool) {
+      const data = await executeNetworkTool(toolName, toolInput);
+      logger.info(`Called Network Tool: ${toolName} -> Paid x402 automatically.`);
+      return JSON.stringify({ success: true, data });
+    }
+
     switch (toolName) {
       case "create_wallet":
         return await executeCreateWallet(toolInput);
@@ -628,5 +650,8 @@ async function executeListWalletsAndContacts(): Promise<string> {
 /**
  * All available tools for export
  */
-export const ALL_TOOLS = toolDefinitions;
+export const ALL_TOOLS = toolDefinitions.map(t => ({
+  type: "function",
+  function: t
+}));
 

@@ -1,36 +1,53 @@
-# 🚀 x402 Agentic Payments — Stellar Testnet
+# 🚀 x402 Agentic Payments — Stellar Hackathon Submission
 
-> AI-powered payment processing on Stellar Network using x402 protocol and LangChain agents for intelligent payment intent handling.
+> "Agents are one of the biggest stories in tech right now, but most agents still run into the same hard stop: payments."
+
+**x402 Agentic Payments** provides the rails for AI agents to act economically, not just conversationally. By combining the HTTP 402 "Payment Required" standard with the **Stellar Network**, we enable agents to natively buy, sell, coordinate, and earn through stablecoin micropayments and MPP-style (Machine Payments Protocol) flows.
 
 ---
 
-## 🌟 Overview
+## 🌟 The Vision: Autonomous Machine-to-Machine Economies
 
-**x402 Agentic Payments** is a backend system that combines:
-- **x402 Protocol**: HTTP 402 Payment Required standard for payment gating
-- **Stellar Blockchain**: Native XLM payments on Stellar testnet
-- **LangChain Agents**: AI agents that understand natural language payment intents
-- **Real-time Processing**: Instant transaction building, signing, and submission
+Today, AI agents can reason, plan, and act—right up until they need to access a premium API, unlock a paid tool, or buy a dataset. They hit a paywall and stop, paralyzed without a human's credit card or API key.
 
-Built for the Stellar Hackathon to demonstrate agentic payment workflows.
+With **x402 on Stellar**, we turn ordinary HTTP requests into paid interactions. This project demonstrates what happens when agents are economically empowered:
+- **Onchain Paywalls:** APIs monetize every useful call instantly rather than hiding behind rigid subscriptions.
+- **Machine Payments Protocol (MPP) Flows:** True machine-to-machine payment pipelines built for paid resources, programmable access, and microtransactions.
+- **Agent-to-Agent Coordination:** Specialized agents (DeFi, Security, News) bidding on tasks and hiring each other autonomously.
 
-## ✨ Features
+Stellar is the perfect backbone for this shift due to its fast settlement, near-zero transaction costs, robust stablecoin infrastructure, and programmable guardrails. Software can finally act economically.
 
-- ✅ **x402 Payment Integration**: 402 Payment Required responses with payment details
-- ✅ **Stellar Testnet Support**: Full keypair generation, account funding, and payment execution
-- ✅ **AI Agent Support**: Natural language intent parsing and payment execution
-- ✅ **Multi-step Workflows**: Build → Sign → Submit payment transactions
-- ✅ **Real-time Logging**: Full visibility into payment processing
-- ✅ **REST API**: Complete HTTP endpoints for payment operations
-- ✅ **SDK Layer**: Wrap paid endpoints and auto-pay clients with x402
+## ⚠️ Project Status & Mocked Data (Hackathon Transparency)
+
+In the spirit of the hackathon requirements, here is exactly what is production-ready and what is currently simulated or mocked:
+
+**What is Real & Onchain:**
+- **x402 Protocol Implementation:** The backend legitimately intercepts requests, calculates pricing, and returns authentic `402 Payment Required` headers containing Stellar payment intents.
+- **Stellar Network Transactions:** Agents successfully generate persistent wallets, build transactions, sign, and submit real XLM payments on the Stellar Testnet. 
+- **LangChain Reasoning:** The specialized agents (DeFi, News, Security) use real OpenAI LLM calls (`gpt-4o` or `gpt-4o-mini`) to parse intents, strategize, and synthesize data.
+- **Public API Tooling:** Several premium agent tools (Weather via Open-Meteo, GitHub repo search, CoinGecko pricing, HackerNews) execute legitimate public `fetch()` requests when unlocked.
+
+**What is Mocked/Simulated:**
+- **Private API Paywalls (Simulated via LLM):** To demonstrate a wide marketplace of paid agent tools without requiring reviewers to provide dozens of private API keys (like Stripe, Twilio), we built a `simulateWithLlm` function. When an agent pays to access "Stripe Balance" or "Twilio Account," the backend uses an LLM to dynamically generate realistic fake JSON data matching the target API's schema.
+- **Soroban Smart Contract Policies:** While Stellar classic transactions (payments and memo verification) handle the current authorization and settlement, advanced Soroban programmable guardrails (e.g., onchain spending limits per agent) are conceptualized but not fully implemented in this current iteration.
+
+---
+
+## ✨ Core Features
+
+- ✅ **x402 Payment Integration**: HTTP 402 responses seamlessly bridging web requests to Stellar.
+- ✅ **Stellar Testnet Support**: Instant XLM microtransactions, account funding, and programmatic verification.
+- ✅ **AI Agent Marketplace**: Agents navigating native web paywalls autonomously.
+- ✅ **SDK Layer**: Wrap any standard Express API endpoint with `.wrapEndpoint()` to instantly monetize it for AI agents.
 
 ## 🛠️ Tech Stack
 
 - **Backend**: Node.js + Express (TypeScript)
-- **Blockchain**: @stellar/stellar-sdk v15.0.1
+- **Blockchain**: @stellar/stellar-sdk
 - **AI/Agents**: @langchain/core, @langchain/openai
 - **Database**: Supabase (optional)
-- **Runtime**: ts-node with TypeScript 5.9.3
+
+---
 
 ## 🚀 Quick Start
 

@@ -1,14 +1,21 @@
+const fs = require('fs');
+const path = require('path');
 
+const targetPath = path.join(__dirname, 'src', 'app', 'page.tsx');
+
+let code = `
 'use client';
 
 import React, { useState } from 'react';
-import { Zap, Menu, X, Sparkles, Lock, Package, Code2, ExternalLink } from 'lucide-react';
+import { Zap, Menu, X, Sparkles } from 'lucide-react';
 import AgentConfigForm from '@/components/AgentConfigForm';
 import AgentChat from '@/components/AgentChat';
+import AgentNetwork from '@/components/AgentNetwork';
 import PreMadeAgents from '@/components/PreMadeAgents';
 import WalletInfo from '@/components/WalletInfo';
-import PaidDataSources from '@/components/PaidDataSources';
-import { AgentConfig as AgentConfigType, AgentQueryResponse } from '@/types/agent';
+import ForgeRuntime from '@/components/ForgeRuntime';
+import InteractionLog from '@/components/InteractionLog';
+import { AgentConfig as AgentConfigType } from '@/types/agent';
 import { AgentAPIClient } from '@/lib/api';
 import { InteractionLogEvent } from '@/types/agent';
 import { ApiTool, NetworkExecutionResponse } from '@/types/network';
@@ -16,6 +23,7 @@ import LandingPage from '@/components/LandingPage';
 
 export default function Home() {
   const [started, setStarted] = useState(false);
+  const [showPreMadeAgents, setShowPreMadeAgents] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
   const [sessionId, setSessionId] = useState('');
@@ -27,8 +35,6 @@ export default function Home() {
   const [logEvents, setLogEvents] = useState<InteractionLogEvent[]>([]);
   const [networkContext, setNetworkContext] = useState<NetworkExecutionResponse | null>(null);
   const [autoMessageSessionId, setAutoMessageSessionId] = useState<string | null>(null);
-  const [rightPanelTab, setRightPanelTab] = useState<'templates' | 'datasources'>('datasources');
-  const [loadPresetId, setLoadPresetId] = useState<string | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -39,7 +45,7 @@ export default function Home() {
       return 'What paid tools can you call via x402?';
     }
     if (agentConfig.description) {
-      return `Hello! Based on your profile: "${agentConfig.description}", demonstrate what you do.`;
+      return \`Hello! Based on your profile: "\${agentConfig.description}", demonstrate what you do.\`;
     }
     return 'Show me what you are capable of.';
   };
@@ -58,7 +64,7 @@ export default function Home() {
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0'));
-    return `${hex.slice(0, 4).join('')}-${hex.slice(4, 6).join('')}-${hex.slice(6, 8).join('')}-${hex.slice(8, 10).join('')}-${hex.slice(10, 16).join('')}`;
+    return \`\${hex.slice(0, 4).join('')}-\${hex.slice(4, 6).join('')}-\${hex.slice(6, 8).join('')}-\${hex.slice(8, 10).join('')}-\${hex.slice(10, 16).join('')}\`;
   };
 
   const pushLog = (event: InteractionLogEvent) => {
@@ -76,42 +82,30 @@ export default function Home() {
       client.setKeypair(keypairData.publicKey, keypairData.secret);
       client.setLogger(pushLog);
 
-      const session = await client.createSession(config);
-      const newSessionId = session.sessionId || createSessionId();
+      const newSessionId = createSessionId();
       setSessionId(newSessionId);
       setAutoMessageSessionId(null);
       setAgentConfig(config);
       setApiClient(client);
       setKeypair(keypairData);
       setMobileMenuOpen(false);
-      if (session.bootMessage) {
-        pushLog({
-          at: new Date().toISOString(),
-          source: 'agent',
-          stage: 'boot_completed',
-          detail: `Boot response from ${config.name}`,
-          payload: { message: session.bootMessage },
-        });
-      }
     } catch (error: any) {
       console.error('Failed to initialize agent:', error);
-      alert(`Error: ${error.message}`);
+      alert(\`Error: \${error.message}\`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSendMessage = async (message: string): Promise<AgentQueryResponse> => {
-    if (!apiClient || !agentConfig) {
-      throw new Error('API Client or Agent Config not initialized');
-    }
+  const handleSendMessage = async (message: string) => {
+    if (!apiClient || !agentConfig) return;
 
     setIsLoading(true);
     pushLog({
       at: new Date().toISOString(),
-      source: 'network',
+      source: 'client',
       stage: 'request_sent',
-      detail: `Query sent to ${agentConfig.name}`,
+      detail: \`Query sent to \${agentConfig.name}\`,
       payload: { message }
     });
 
@@ -121,16 +115,16 @@ export default function Home() {
         at: new Date().toISOString(),
         source: 'agent',
         stage: 'response_received',
-        detail: `Response from ${agentConfig.name}`,
-        payload: { responseLength: response.response?.length, trace: response.trace?.length }
+        detail: \`Response from \${agentConfig.name}\`,
+        payload: { textLength: response.text?.length, hasRawOutput: !!response.rawOutput }
       });
       return response;
     } catch (error: any) {
       pushLog({
         at: new Date().toISOString(),
-        source: 'forge',
+        source: 'system',
         stage: 'error',
-        detail: `Communication failed`,
+        detail: \`Communication failed\`,
         payload: error.message
       });
       throw error;
@@ -161,22 +155,28 @@ export default function Home() {
             <span className="text-[10px] text-emerald-500/80 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 ml-2 hidden sm:inline-block font-mono">LIVE ESCROW ACTIVE</span>
           </div>
           
-          <div className="flex items-center gap-3"></div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowPreMadeAgents(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg transition-colors border border-emerald-500/30 text-sm font-medium"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span className="hidden sm:inline">Templates</span>
+            </button>
+          </div>
         </div>
       </header>
 
       {/* MAIN DASHBOARD MAP */}
       <div className="flex-1 flex overflow-hidden">
-        {/* LEFT COLUMN: Wallet & Configuration */}
-        <div className={`${agentConfig ? 'w-[340px]' : 'w-[420px]'} flex-col shrink-0 border-r border-slate-800 bg-slate-900/30 overflow-y-auto hidden md:flex transition-all duration-300`}>
+        {/* LEFT COLUMN: Setup & Tools */}
+        <div className={\`\${agentConfig ? 'w-[320px]' : 'w-[420px]'} flex-col shrink-0 border-r border-slate-800 bg-slate-900/30 overflow-y-auto hidden md:flex transition-all duration-300\`}>
           {!agentConfig ? (
             <div className="flex flex-col min-h-full">
-              <AgentConfigForm
-                onConfigSubmit={handleConfigSubmit}
-                isLoading={isLoading}
-                onKeypairChange={setKeypair}
-                loadPresetId={loadPresetId}
-              />
+              <AgentConfigForm onConfigSubmit={handleConfigSubmit} isLoading={isLoading} onKeypairChange={setKeypair} />
+              <div className="border-t border-slate-800 mt-4 pt-4 p-4 flex-1">
+                <AgentNetwork apiUrl={apiUrl} onAgentSelect={setSelectedAgent} />
+              </div>
             </div>
           ) : (
             <div className="p-5 flex flex-col h-full bg-slate-900/10">
@@ -249,62 +249,65 @@ export default function Home() {
                   autoMessage={sessionId && autoMessageSessionId !== sessionId ? autoMessage : undefined}
                   onAutoMessageSent={() => setAutoMessageSessionId(sessionId)}
                   logEvents={logEvents}
-                  showInlineLogs={true}
                 />
               </div>
             </div>
           )}
         </div>
 
-        {/* RIGHT COLUMN: Templates & Paid Data Sources */}
-        <div className="w-[420px] shrink-0 bg-slate-900 hidden lg:flex flex-col relative border-l border-slate-800">
-          {/* Tab Navigation */}
-          <div className="flex border-b border-slate-800 bg-slate-900/50">
-            <button
-              onClick={() => setRightPanelTab('datasources')}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
-                rightPanelTab === 'datasources'
-                  ? 'border-b-2 border-emerald-500 text-emerald-400 bg-slate-800/50'
-                  : 'text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              <Lock className="w-4 h-4" />
-              <span>Unified Data</span>
-            </button>
-            <button
-              onClick={() => setRightPanelTab('templates')}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
-                rightPanelTab === 'templates'
-                  ? 'border-b-2 border-emerald-500 text-emerald-400 bg-slate-800/50'
-                  : 'text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <span>Actors</span>
-            </button>
-            <button
-              onClick={() => window.open('/sdk', '_blank')}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors text-slate-400 hover:text-emerald-400 hover:bg-slate-800/50"
-            >
-              <Code2 className="w-4 h-4" />
-              <ExternalLink className="w-3 h-3" />
-            </button>
-          </div>
+        {/* RIGHT COLUMN: Realtime Data (Logs + Runtime) */}
+        {agentConfig && (
+            <div className="w-[380px] shrink-0 bg-slate-900 hidden lg:flex flex-col relative">
+              <div className="h-1/2 flex flex-col border-b border-slate-800">
+                <div className="p-3 border-b border-slate-800 shrink-0 bg-slate-900/50">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Intelligent Automation</h3>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 bg-slate-950/80">
+                  <ForgeRuntime apiUrl={apiUrl} onLog={pushLog} />
+                </div>
+              </div>
 
-          {/* Tab Content */}
-          <div className="flex-1 overflow-y-auto bg-slate-950/80">
-            {rightPanelTab === 'datasources' ? (
-              <div className="p-4">
-                <PaidDataSources />
+              <div className="h-1/2 flex flex-col">
+                <div className="p-3 flex items-center justify-between border-b border-slate-800 shrink-0 bg-slate-900/50">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Network Trace</h3>
+                  <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded-md">{logEvents.length} frames</span>
+                </div>
+                <div className="flex-1 overflow-hidden bg-black/40">
+                  <InteractionLog events={logEvents} onClear={() => setLogEvents([])} compact />
+                </div>
               </div>
-            ) : (
-              <div className="p-4">
-                <PreMadeAgents onLoadPreset={setLoadPresetId} />
-              </div>
-            )}
+            </div>
+        )}
+      </div>
+      
+      {/* FLOATING PREMADE AGENTS PANEL */}
+      {showPreMadeAgents && (
+        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[85vh] overflow-y-auto shadow-2xl flex flex-col">
+            <div className="sticky top-0 bg-slate-900/90 backdrop-blur-md p-4 border-b border-slate-800 flex justify-between items-center z-10">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-emerald-400" />
+                Select a Specialized Agent
+              </h2>
+              <button onClick={() => setShowPreMadeAgents(false)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <PreMadeAgents 
+                onSelect={(agent) => {
+                  setSelectedAgent(agent);
+                  setShowPreMadeAgents(false);
+                }} 
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
+`;
+
+fs.writeFileSync(targetPath, code);
+console.log('Successfully wrote exact path:', targetPath);

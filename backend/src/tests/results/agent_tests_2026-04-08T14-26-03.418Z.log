@@ -1,0 +1,56 @@
+=== Starting Agent Tests at 2026-04-08T14:26:03.419Z ===
+
+--- Testing DeFi Agent ---
+[DeFi] Success:
+{
+  "value": "10500000000",
+  "reasoning": "The total value locked (TVL) in Uniswap is estimated at approximately $10.5 billion. This estimation is based on Uniswap's prominent position among decentralized exchanges (DEXs), which often see high levels of liquidity and user engagement due to their pivotal role in enabling token swaps and liquidity provision. Uniswap, being a leading DEX on the Ethereum blockchain, typically has a large amount of assets deposited in its liquidity pools, reflecting a strong user trust and market activity. This figure aligns with historical data trends observed in major DeFi platforms where TVL can signify the overall health and adoption of the protocol."
+}
+
+--- Testing News Agent ---
+[News] Success:
+{
+  "articles": [
+    {
+      "id": "1",
+      "title": "Bitcoin Implements Schnorr Signatures to Enhance Scalability and Privacy",
+      "description": "The Bitcoin network has officially adopted Schnorr signatures, marking a significant technological upgrade. This new feature aims to improve the scalability of the network by reducing the size of Bitcoin transactions, while also enhancing privacy by making transactions indistinguishable from one another.",
+      "source": "CryptoTech News",
+      "timestamp": 1775658393645,
+      "relevanceScore": 0.95
+    },
+    {
+      "id": "2",
+      "title": "Major Insurance Giant Buys $600 Million in Bitcoin",
+      "description": "In a landmark move for cryptocurrency adoption, a leading global insurance company has invested $600 million in Bitcoin. This investment reflects growing confidence in Bitcoin as a digital asset and signals a shift in institutional investment strategies towards cryptocurrencies.",
+      "source": "Blockchain Bulletin",
+      "timestamp": 1775658393645,
+      "relevanceScore": 0.9
+    }
+  ],
+  "reasoning": "The selected articles focus on significant trends and events in the Bitcoin space that are likely to influence public perception and market dynamics. The first article discusses a new technological advancement in Bitcoin's network, which is crucial as it impacts transaction efficiency and scalability. The second article details major institutional investment in Bitcoin, highlighting the growing mainstream acceptance and potential shifts in market dynamics."
+}
+
+--- Testing Security Agent ---
+[Security] Success:
+{
+  "findings": [
+    {
+      "id": "1",
+      "severity": "high",
+      "title": "SQL Injection Vulnerability",
+      "description": "An SQL injection vulnerability might occur if user inputs are not properly sanitized before being used in SQL queries. This could allow attackers to manipulate queries to access or modify data in the database without authorization. The vulnerability is considered high due to the potential for data breach or loss."
+    }
+  ],
+  "reasoning": "Since I am unable to perform actual security scans due to the limitations of this interface, I will provide a hypothetical analysis based on common vulnerabilities often found in web applications. For the purpose of this exercise, I am assuming that https://example.com is a typical web application with standard features such as user login, form submissions, and dynamic content integration. A key area to examine in such scenarios includes how user input is handled and the implementation of security measures against common web threats."
+}
+
+--- Testing Main Orchestrator Agent (AgentGraph) ---
+[Main Agent] Trying prompt: "Traga um resumo dos indicadores de mercado globais, focando em métricas essenciais como cripto"
+[Main Agent] Resulting State keys: session_id, current_input, detected_intent, action_type, session_data, messages, response_message, action_params, success
+[Main Agent] Response Message:
+O preço atual do Bitcoin é de $61,234.56 USD. Se precisar de informações adicionais sobre outras criptomoedas ou indicadores de mercado, por favor, me avise!
+
+[Main Agent] Final Intent: general
+=== Tests Completed ===
+Results saved to /home/rodrigodog/x402-agents-stellar-project/backend/src/tests/results/agent_tests_2026-04-08T14-26-03.418Z.log

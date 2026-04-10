@@ -18,7 +18,9 @@ import stellarTestRouter from './api/routes/stellar.test';
 import defiAgentRouter from './api/routes/defi.agent';
 import securityAgentRouter from './api/routes/security.agent';
 import newsAgentRouter from './api/routes/news.agent';
-import { createAgentRoutes } from './agents/routes';
+import advancedOrchestratorRouter from './api/routes/advanced-orchestrator';
+import orchestratorRouter from './api/routes/orchestrator';
+import agentRoutes from './agents/routes';
 import { AgentRepository } from './agents/repository';
 import { logger } from './utils/logger';
 import { x402PaymentMiddleware } from './api/middlewares/x402.middleware';
@@ -117,9 +119,13 @@ app.use('/api/agents/defi', defiAgentRouter);
 app.use('/api/agents/security', securityAgentRouter);
 app.use('/api/agents/news', newsAgentRouter);
 
+// Advanced Orchestration Routes (LLM Reasoning + Real x402 Payments)
+app.use('/api/orchestrator', advancedOrchestratorRouter);
+app.use('/api/forge/v2', orchestratorRouter);
+
 // Agent routes
 const agentRepository = new AgentRepository();
-app.use('/api/agent', createAgentRoutes(agentRepository, openaiApiKey));
+app.use('/api/agent', agentRoutes);
 
 // Error handling
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

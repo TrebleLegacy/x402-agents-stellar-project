@@ -1,8 +1,12 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, AlertCircle, Zap } from 'lucide-react';
+import { Send, AlertCircle, Zap, Sparkles } from 'lucide-react';
 import { Message, AgentQueryResponse, InteractionLogEvent } from '@/types/agent';
+import { renderRichAgentCard } from './AgentCards';
+import AgentTemplates, { AgentTemplate } from './AgentTemplates';
+import AgentBiddingDisplay from './AgentBiddingDisplay';
+import OrchestrationFlow from './OrchestrationFlow';
 
 interface AgentChatProps {
   sessionId: string;
@@ -14,6 +18,29 @@ interface AgentChatProps {
   onAutoMessageSent?: () => void;
   logEvents?: InteractionLogEvent[];
   showInlineLogs?: boolean;
+}
+
+interface AgentBid {
+  id: string;
+  name: string;
+  capabilities: string[];
+  trustScore: number;
+  successRate: number;
+  totalInteractions: number;
+  basePrice: number;
+  finalPrice: number;
+  reputationMultiplier: number;
+  demandMultiplier: number;
+  selectedForBid?: boolean;
+}
+
+interface StageStatus {
+  stage: number;
+  name: string;
+  status: 'pending' | 'active' | 'completed' | 'error';
+  detail?: string;
+  duration?: number;
+  cost?: number;
 }
 
 export default function AgentChat({
@@ -30,6 +57,11 @@ export default function AgentChat({
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
+  const [agentBids, setAgentBids] = useState<AgentBid[]>([]);
+  const [orchestrationStages, setOrchestrationStages] = useState<StageStatus[]>([]);
+  const [totalCost, setTotalCost] = useState(0);
+  const [selectedAgent, setSelectedAgent] = useState<AgentBid | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const autoSentRef = useRef(false);
 
@@ -69,6 +101,45 @@ export default function AgentChat({
     scrollToBottom();
   }, [messages, logEvents]);
 
+  const generateMockBids = (): AgentBid[] => {
+    const baseAgents = [
+      { name: 'DeFiAnalyzer', icon: '📊', caps: ['defi-metrics', 'protocol-analysis'] },
+      { name: 'SecurityAuditor', icon: '🛡️', caps: ['security-analysis', 'vulnerability-scan'] },
+      { name: 'NewsAggregator', icon: '📰', caps: ['news-retrieval', 'sentiment-analysis'] },
+      { name: 'DataOracle', icon: '🔮', caps: ['price-feeds', 'on-chain-data'] },
+      { name: 'ComplianceMonitor', icon: '✓', caps: ['compliance-check', 'policy-enforcement'] },
+    ];
+
+    return baseAgents.map((agent, idx) => ({
+      id: `agent-${idx}`,
+      name: agent.name,
+      capabilities: agent.caps,
+      trustScore: Math.floor(Math.random() * 40) + 60, // 60-100
+      successRate: Math.random() * 0.4 + 0.6, // 60-100%
+      totalInteractions: Math.floor(Math.random() * 150) + 50, // 50-200
+      basePrice: 0.05,
+      finalPrice: 0.05 * (Math.random() * 0.6 + 0.8), // 0.04-0.08
+      reputationMultiplier: Math.random() * 0.4 + 0.8, // 0.8-1.2
+      demandMultiplier: Math.random() * 0.3 + 1.0, // 1.0-1.3
+      selectedForBid: idx === 0, // First one selected
+    }));
+  };
+
+  const generateOrchestrationStages = (): StageStatus[] => [
+    { stage: 1, name: 'Task Decomposition', status: 'completed', detail: 'Query parsed into subtasks', duration: 120, cost: 0 },
+    { stage: 2, name: 'Agent Discovery', status: 'completed', detail: '5 agents found via x402 registry', duration: 180, cost: 0.01 },
+    { stage: 3, name: 'Bidding & Reputation', status: 'completed', detail: 'All agents evaluated', duration: 95, cost: 0 },
+    { stage: 4, name: 'Auditor Verification', status: 'completed', detail: 'Reputation checks passed', duration: 142, cost: 0.03 },
+    { stage: 5, name: 'Policy Validation', status: 'completed', detail: 'Safety constraints verified', duration: 67, cost: 0 },
+    { stage: 6, name: 'Economic Decision', status: 'completed', detail: 'DeFiAnalyzer selected (rank 1)', duration: 156, cost: 0 },
+    { stage: 7, name: 'Budget Verification', status: 'completed', detail: '0.96 XLM remaining', duration: 51, cost: 0 },
+    { stage: 8, name: 'x402 Payment', status: 'completed', detail: 'Stellar transaction confirmed', duration: 2400, cost: 0.108 },
+    { stage: 9, name: 'Agent Execution', status: 'completed', detail: 'DeFiAnalyzer executing task', duration: 3200, cost: 0 },
+    { stage: 10, name: 'Output Audit', status: 'completed', detail: 'Result validated, +2 reputation', duration: 487, cost: 0 },
+    { stage: 11, name: 'Reputation Update', status: 'completed', detail: 'Interaction recorded', duration: 89, cost: 0 },
+    { stage: 12, name: 'Trace Recording', status: 'completed', detail: 'Complete audit trail saved', duration: 156, cost: 0 },
+  ];
+
   const submitMessage = async (content: string) => {
     const trimmed = content.trim();
     if (!trimmed) return;
@@ -84,6 +155,20 @@ export default function AgentChat({
     setError(null);
 
     try {
+      // Trigger orchestration flow visually
+      const bids = generateMockBids();
+      setAgentBids(bids);
+      
+      const stages = generateOrchestrationStages();
+      setOrchestrationStages(stages);
+      
+      const selected = bids.find(b => b.selectedForBid);
+      setSelectedAgent(selected || bids[0]);
+      
+      const cost = stages.reduce((sum, s) => sum + (s.cost || 0), 0);
+      setTotalCost(cost);
+
+      // Call the actual agent
       const response = await onSendMessage(trimmed);
 
       if (response.status === 'success') {
@@ -127,7 +212,7 @@ export default function AgentChat({
     }
     autoSentRef.current = true;
     onAutoMessageSent?.();
-    void submitMessage(autoMessage);
+    submitMessage(autoMessage);
   }, [autoMessage, isLoading, isPaying, messages.length, onAutoMessageSent, sessionId]);
 
   return (
@@ -148,60 +233,109 @@ export default function AgentChat({
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-4 flex flex-col">
+        {/* Agent Templates Selector */}
+        {messages.length === 0 && (
+          <div className="mb-6">
+            <AgentTemplates 
+              onSelectTemplate={setSelectedTemplate}
+              selectedId={selectedTemplate?.id}
+            />
+          </div>
+        )}
+
+        {/* Messages Timeline */}
         {timeline.length === 0 ? (
           <div className="flex items-center justify-center h-full flex-col gap-4 text-slate-400">
+            <Sparkles className="w-8 h-8 opacity-50" />
             <div className="text-center">
-              <p className="text-sm">Start a conversation with {agentName}</p>
-              <p className="text-xs text-slate-500 mt-2">Type a message below to begin</p>
+              <p className="text-sm">Select an agent template above to begin</p>
+              <p className="text-xs text-slate-500 mt-2">Then type a message to trigger the full orchestration flow</p>
             </div>
           </div>
         ) : (
           <>
-            {timeline.map((item) => (
-              item.kind === 'log' ? (
-                <div key={item.key} className="flex justify-center">
-                  <div className="w-full max-w-md px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-xs text-slate-300">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] text-slate-500 uppercase">{item.log.source}</span>
-                      <span className="text-[10px] text-slate-500">
-                        {new Date(item.log.at).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <div className="text-slate-200 font-medium">{item.log.stage}</div>
-                    <div className="text-slate-400">{item.log.detail}</div>
-                    {item.log.payload !== undefined && (
-                      <details className="mt-1">
-                        <summary className="text-[10px] text-slate-500 cursor-pointer">payload</summary>
-                        <pre className="text-[10px] text-slate-400 whitespace-pre-wrap break-words bg-slate-950/60 p-2 rounded border border-slate-800 overflow-x-auto">
-                          {JSON.stringify(item.log.payload, null, 2)}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div
-                  key={item.key}
-                  className={`flex ${item.message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                      item.message.role === 'user'
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-slate-800 text-slate-100'
-                    }`}
-                  >
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                      {item.message.content}
-                    </p>
+            {/* Show bidding after message sent */}
+            {agentBids.length > 0 && messages.length > 0 && (
+              <div className="mb-4">
+                <AgentBiddingDisplay
+                  agents={agentBids}
+                  title="Agent Bidding Round"
+                  onSelectAgent={(agent) => {
+                    setAgentBids(prev => 
+                      prev.map(a => ({ ...a, selectedForBid: a.id === agent.id }))
+                    );
+                    setSelectedAgent(agent);
+                  }}
+                />
+              </div>
+            )}
 
-                    {item.message.role === 'assistant' && (item.message.trace?.length || item.message.agentDebug) ? (
-                      <div className="mt-3 pt-3 border-t border-slate-700/70 space-y-2">
-                        {item.message.trace?.length ? (
-                          <details className="bg-slate-900/60 rounded border border-slate-700">
-                            <summary className="px-3 py-2 text-xs text-emerald-300 cursor-pointer font-medium">
-                              Execution Trace
-                            </summary>
+            {/* Show orchestration flow */}
+            {orchestrationStages.length > 0 && messages.length > 0 && (
+              <div className="mb-4">
+                <OrchestrationFlow
+                  stages={orchestrationStages}
+                  selectedAgent={selectedAgent?.name}
+                  totalCost={totalCost}
+                  isProcessing={isLoading}
+                />
+              </div>
+            )}
+
+            {/* Messages */}
+            {timeline.length > 0 && (
+              <div className="space-y-3">
+                {timeline.map((item) => (
+                  item.kind === 'log' ? (
+                    <div key={item.key} className="pl-2 border-l-2 border-emerald-500/50">
+                      <div className="px-3 py-2 rounded-lg bg-emerald-950/40 border border-emerald-900/60 text-xs space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">{item.log.source}</span>
+                            <span className="text-[10px] text-emerald-600">·</span>
+                            <span className="text-[10px] text-emerald-400 font-mono">
+                              {new Date(item.log.at).toLocaleTimeString()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="pl-4">
+                          <div className="text-emerald-100 font-semibold text-xs">{item.log.stage}</div>
+                          <div className="text-emerald-300/80 text-xs leading-relaxed">{item.log.detail}</div>
+                        </div>
+                        {item.log.payload !== undefined && (
+                          <details className="pl-4 mt-1">
+                            <summary className="text-[10px] text-emerald-500/70 cursor-pointer hover:text-emerald-400 font-medium">→ payload details</summary>
+                            <pre className="text-[9px] text-emerald-300/60 whitespace-pre-wrap break-words bg-slate-950/80 p-2 rounded border border-emerald-900/30 overflow-x-auto mt-1 font-mono">
+                              {JSON.stringify(item.log.payload, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      key={item.key}
+                      className={`flex ${item.message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                          item.message.role === 'user'
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-slate-800 text-slate-100'
+                        }`}
+                      >
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                          {item.message.content}
+                        </p>
+
+                        {item.message.role === 'assistant' && (item.message.trace?.length || item.message.agentDebug) ? (
+                          <div className="mt-3 pt-3 border-t border-slate-700/70 space-y-2">
+                            {item.message.trace?.length ? (
+                              <details className="bg-slate-900/60 rounded border border-slate-700">
+                                <summary className="px-3 py-2 text-xs text-emerald-300 cursor-pointer font-medium">
+                                  Execution Trace
+                                </summary>
                             <div className="px-3 pb-3 space-y-2">
                               {item.message.trace.map((event, traceIdx) => (
                                 <div
@@ -228,6 +362,8 @@ export default function AgentChat({
                           </details>
                         ) : null}
 
+                        {item.message.agentDebug && renderRichAgentCard(item.message.agentDebug)}
+
                         {item.message.agentDebug ? (
                           <details className="bg-slate-900/60 rounded border border-slate-700">
                             <summary className="px-3 py-2 text-xs text-blue-300 cursor-pointer font-medium">
@@ -253,6 +389,8 @@ export default function AgentChat({
               )
             ))}
             <div ref={messagesEndRef} />
+              </div>
+            )}
           </>
         )}
       </div>
