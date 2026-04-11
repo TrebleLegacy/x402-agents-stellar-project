@@ -30,12 +30,12 @@ const port = Number(process.env.PORT) || 8000;
 const openaiApiKey = process.env.OPENAI_API_KEY || '';
 
 // Middleware
-const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001')
+const allowedOrigins = ('*')
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
 
-const allowAllOrigins = process.env.CORS_ALLOW_ALL === 'true';
+const allowAllOrigins = true;
 
 app.use(
   cors({
