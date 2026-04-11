@@ -1,0 +1,23 @@
+
+> x402-agent-frontend@0.1.0 build
+> next build
+
+  ▲ Next.js 14.2.35
+  - Environments: .env
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+Failed to compile.
+
+./src/app/page.tsx:101:7
+Type error: Type '"client"' is not assignable to type '"agent" | "specialist" | "forge" | "sdk" | "network"'.
+
+[0m [90m  99 |[39m     pushLog({[0m
+[0m [90m 100 |[39m       at[33m:[39m [36mnew[39m [33mDate[39m()[33m.[39mtoISOString()[33m,[39m[0m
+[0m[31m[1m>[22m[39m[90m 101 |[39m       source[33m:[39m [32m'client'[39m[33m,[39m[0m
+[0m [90m     |[39m       [31m[1m^[22m[39m[0m
+[0m [90m 102 |[39m       stage[33m:[39m [32m'request_sent'[39m[33m,[39m[0m
+[0m [90m 103 |[39m       detail[33m:[39m [32m`Query sent to ${agentConfig.name}`[39m[33m,[39m[0m
+[0m [90m 104 |[39m       payload[33m:[39m { message }[0m
+Next.js build worker exited with code: 1 and signal: null

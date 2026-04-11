@@ -1,0 +1,88 @@
+import React from 'react';
+
+export const DeFiCard = ({ data }: { data: any }) => {
+  if (!data) return null;
+  return (
+    <div className="mt-3 bg-slate-900 border border-blue-500/50 rounded-lg p-4 font-mono text-xs">
+      <div className="flex items-center gap-2 mb-2 text-blue-400">
+        <span className="font-bold text-sm">📈 DeFi Metrics: {data.protocol || "Protocol"}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="bg-slate-950 p-2 rounded border border-slate-800">
+          <p className="text-slate-500 mb-1">Metric</p>
+          <p className="text-slate-200 capitalize">{data.metric}</p>
+        </div>
+        <div className="bg-slate-950 p-2 rounded border border-slate-800">
+          <p className="text-slate-500 mb-1">Value</p>
+          <p className="text-green-400 font-bold">${Number(data.value).toLocaleString()}</p>
+        </div>
+      </div>
+      <div className="mt-2 bg-slate-950 p-2 rounded border border-slate-800">
+         <p className="text-slate-500 mb-1">Analysis</p>
+         <p className="text-slate-300">{data.reasoning}</p>
+      </div>
+    </div>
+  );
+};
+
+export const NewsCard = ({ data }: { data: any }) => {
+  if (!data?.articles) return null;
+  return (
+    <div className="mt-3 bg-slate-900 border border-purple-500/50 rounded-lg p-4 text-xs">
+      <div className="flex items-center gap-2 mb-3 text-purple-400">
+        <span className="font-bold text-sm">📰 Market Intel Radar</span>
+      </div>
+      <div className="space-y-3">
+        {data.articles.map((art: any, i: number) => (
+          <div key={i} className="bg-slate-950 p-3 rounded border border-slate-800 hover:border-slate-700 transition-colors">
+            <h4 className="text-slate-200 font-semibold mb-1">{art.title}</h4>
+            <p className="text-slate-400 mb-2 leading-relaxed">{art.summary}</p>
+            <div className="flex items-center justify-between text-[10px] text-slate-500 italic">
+              <span>Source: {art.source}</span>
+              <span>Confidence: {art.confidence}%</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export const SecurityCard = ({ data }: { data: any }) => {
+  if (!data?.findings) return null;
+  return (
+    <div className="mt-3 bg-slate-900 border border-red-500/50 rounded-lg p-4 font-mono text-xs">
+      <div className="flex items-center gap-2 mb-2 text-red-400">
+        <span className="font-bold text-sm">🛡️ Security Audit Report</span>
+      </div>
+      <div className="space-y-2">
+        {data.findings.map((f: any, i: number) => (
+          <div key={i} className={`bg-slate-950 p-2 rounded border border-l-2 ${f.severity === 'HIGH' || f.severity === 'CRITICAL' ? 'border-l-red-500 border-red-900/30' : 'border-l-yellow-500 border-yellow-900/30'}`}>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-slate-300 font-bold">{f.vulnerability}</span>
+              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${f.severity === 'HIGH' || f.severity === 'CRITICAL' ? 'bg-red-900/50 text-red-400' : 'bg-yellow-900/50 text-yellow-400'}`}>{f.severity}</span>
+            </div>
+            <p className="text-slate-400 leading-relaxed">{f.description}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 text-[10px] text-slate-500 text-right">
+        Audit conclusion: {data.reasoning}
+      </div>
+    </div>
+  );
+};
+
+export const renderRichAgentCard = (agentDebug: any) => {
+  if (!agentDebug?.task || !agentDebug?.params?.result) return null;
+  switch (agentDebug.task) {
+    case 'get_defi_data':
+      return <DeFiCard data={agentDebug.params.result} />;
+    case 'get_news':
+      return <NewsCard data={agentDebug.params.result} />;
+    case 'get_security_audit':
+      return <SecurityCard data={agentDebug.params.result} />;
+    default:
+      return null;
+  }
+};

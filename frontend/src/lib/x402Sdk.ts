@@ -33,6 +33,7 @@ export class X402SdkClient {
   private paymentClient: X402PaymentClient;
   private wallet: X402Wallet | null = null;
   private onLog?: (event: InteractionLogEvent) => void;
+  private logSource: InteractionLogEvent['source'] = 'specialist';
 
   constructor(private baseURL: string, private network: X402Network = 'testnet') {
     this.client = axios.create({
@@ -50,6 +51,10 @@ export class X402SdkClient {
     this.onLog = callback;
   }
 
+  setLogSource(source: InteractionLogEvent['source']): void {
+    this.logSource = source;
+  }
+
   private emitLog(event: InteractionLogEvent): void {
     if (this.onLog) {
       this.onLog(event);
@@ -61,6 +66,16 @@ export class X402SdkClient {
   }
 
   async payAndRequest<T = any>(options: PayAndRequestOptions): Promise<T> {
+    const result = await this.payAndRequestDetailed<T>(options);
+    return result.data;
+  }
+
+  async payAndRequestDetailed<T = any>(options: PayAndRequestOptions): Promise<{
+    data: T;
+    paymentResponse?: any;
+    status: number;
+    headers: Record<string, any>;
+  }> {
     const response = await this.client.request({
       method: options.method || 'post',
       url: options.path,
@@ -71,9 +86,9 @@ export class X402SdkClient {
 
     this.emitLog({
       at: new Date().toISOString(),
-      source: 'specialist',
+      source: this.logSource,
       stage: 'request_submitted',
-      detail: 'Specialist request sent',
+      detail: 'x402 request sent',
       payload: { path: options.path },
     });
 
@@ -81,20 +96,25 @@ export class X402SdkClient {
       if (response.status >= 400) {
         this.emitLog({
           at: new Date().toISOString(),
-          source: 'specialist',
+          source: this.logSource,
           stage: 'request_failed',
-          detail: 'Specialist request failed',
+          detail: 'x402 request failed',
           payload: response.data,
         });
         throw new Error(response.data?.error || 'Request failed');
       }
       this.emitLog({
         at: new Date().toISOString(),
-        source: 'specialist',
+        source: this.logSource,
         stage: 'request_succeeded',
-        detail: 'Specialist request succeeded without payment',
+        detail: 'x402 request succeeded without payment',
       });
-      return response.data as T;
+      return {
+        data: response.data as T,
+        paymentResponse: this.parsePaymentResponse(response.headers),
+        status: response.status,
+        headers: response.headers,
+      };
     }
 
     if (!this.wallet) {
@@ -105,7 +125,7 @@ export class X402SdkClient {
     if (!instructions?.payTo || !instructions?.price) {
       this.emitLog({
         at: new Date().toISOString(),
-        source: 'specialist',
+        source: this.logSource,
         stage: 'paywall_invalid',
         detail: 'Payment instructions missing from 402 response',
         payload: response.data,
@@ -115,7 +135,7 @@ export class X402SdkClient {
 
     this.emitLog({
       at: new Date().toISOString(),
-      source: 'specialist',
+      source: this.logSource,
       stage: 'paywall_received',
       detail: 'Received 402 payment instructions',
       payload: instructions,
@@ -138,9 +158,9 @@ export class X402SdkClient {
 
     this.emitLog({
       at: new Date().toISOString(),
-      source: 'specialist',
+      source: this.logSource,
       stage: 'payment_signed',
-      detail: 'Payment signature created for specialist',
+      detail: 'Payment signature created for x402 request',
       payload: { destination: instructions.payTo, amount: priceInfo.amount },
     });
 
@@ -164,9 +184,9 @@ export class X402SdkClient {
     if (retryResponse.status >= 400) {
       this.emitLog({
         at: new Date().toISOString(),
-        source: 'specialist',
+        source: this.logSource,
         stage: 'payment_retry_failed',
-        detail: 'Specialist payment retry failed',
+        detail: 'x402 payment retry failed',
         payload: retryResponse.data,
       });
       throw new Error(retryResponse.data?.error || 'Payment request failed');
@@ -174,13 +194,18 @@ export class X402SdkClient {
 
     this.emitLog({
       at: new Date().toISOString(),
-      source: 'specialist',
+      source: this.logSource,
       stage: 'payment_retry_succeeded',
-      detail: 'Payment accepted by specialist',
+      detail: 'x402 payment accepted',
       payload: retryResponse.data,
     });
 
-    return retryResponse.data as T;
+    return {
+      data: retryResponse.data as T,
+      paymentResponse: this.parsePaymentResponse(retryResponse.headers),
+      status: retryResponse.status,
+      headers: retryResponse.headers,
+    };
   }
 
   private extractInstructions(payload: any): PaymentInstructions | null {
@@ -199,5 +224,11 @@ export class X402SdkClient {
       return { amount: price.replace('$', ''), asset: fallbackAsset };
     }
     return { amount: price.amount, asset: price.asset };
+  }
+
+  private parsePaymentResponse(headers: Record<string, any>): any | undefined {
+    const headerValue = headers?.['payment-response'] || headers?.['Payment-Response'];
+    if (!headerValue || typeof headerValue !== 'string') return undefined;
+    return this.paymentClient.parsePaymentResponse(headerValue);
   }
 }

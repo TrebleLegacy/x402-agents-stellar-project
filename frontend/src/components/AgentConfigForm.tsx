@@ -1,27 +1,30 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Settings } from 'lucide-react';
 import { AgentConfig as AgentConfigType } from '@/types/agent';
 import WalletManager from './WalletManager';
+import { AGENT_PRESETS } from '@/data/agentPresets';
 
 interface AgentConfigProps {
   onConfigSubmit: (config: AgentConfigType, keypair: { publicKey: string; secret: string }) => void;
   isLoading: boolean;
   onKeypairChange?: (keypair: { publicKey: string; secret: string }) => void;
+  loadPresetId?: string | null;
 }
 
 export default function AgentConfigForm({
   onConfigSubmit,
   isLoading,
   onKeypairChange,
+  loadPresetId,
 }: AgentConfigProps) {
   const [config, setConfig] = useState<AgentConfigType>({
     name: '',
     description: '',
     systemPrompt: '',
     model: 'gpt-4o',
-    temperature: 0.7,
+    temperature: 0.4,
     maxTokens: 2000,
   });
 
@@ -41,6 +44,25 @@ export default function AgentConfigForm({
     setKeypair(selectedKeypair);
     onKeypairChange?.(selectedKeypair);
   };
+
+  const handleLoadPremade = (presetId: string) => {
+    const preset = AGENT_PRESETS.find((agent) => agent.id === presetId);
+    if (!preset) return;
+    setConfig(prev => ({
+      ...prev,
+      name: preset.name,
+      description: preset.description,
+      systemPrompt: preset.systemPrompt,
+      temperature: preset.temperature,
+      maxTokens: preset.maxTokens,
+      model: preset.model || prev.model,
+    }));
+  };
+
+  useEffect(() => {
+    if (!loadPresetId) return;
+    handleLoadPremade(loadPresetId);
+  }, [loadPresetId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

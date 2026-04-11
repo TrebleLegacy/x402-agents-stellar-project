@@ -1,85 +1,104 @@
-/**
- * Agent state types for LangGraph workflow
- */
-
 export interface SessionData {
   session_token: string;
   user_id: string;
   email: string;
-  public_key?: string;
-  phone_number?: string;
   created_at: string;
   last_activity: string;
 }
 
+export interface AgentConfig {
+  name?: string;
+  description?: string;
+  systemPrompt?: string;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+// ---------------------------------------------------------
+// FORGE v3: Core Production Feature Types
+// ---------------------------------------------------------
+
+/**
+ * 1. Identity + Reputation Layer
+ * Tracks on-chain metrics and reputation for economic ranking
+ */
+export interface AgentIdentity {
+  stellarAddress: string;
+  agentType: string;
+  reputationScore: number;     // 0-100 scale (used in bidding)
+  successRate: number;         // % of successful task completions
+  avgLatencyMs: number;
+  totalSlashedXlm: number;
+  stakeAmount: number;
+}
+
+/**
+ * 2. Payment Policy Engine
+ * Programmable spending constraints enforced natively
+ */
+export interface PaymentPolicy {
+  maxSpendPerRequest: number;  // Hard cap XLM
+  maxSpendPerTask: number;
+  allowedContractAddresses: string[];
+  allowedAssets: ('XLM' | 'USDC')[];
+  rateLimitPerMinute: number;
+}
+
+/**
+ * 3 & 4. Escrow, Settlement & Staking Contracts
+ * Data tracking the lifecycle of trustless settlements
+ */
+export interface EscrowContract {
+  escrowId: string;
+  lockedAmount: number;
+  asset: string;
+  stakedAmount: number;
+  verifierAgent: string;       // Auditor Agent address
+  status: 'locked' | 'released' | 'slashed' | 'disputed';
+}
+
+/**
+ * 9. Real-Time Budget Management
+ * Tracks orchestrator's budget context
+ */
+export interface TaskBudget {
+  initialBudgetXlm: number;
+  spentXlm: number;
+  remainingXlm: number;
+  allowFallback: boolean;      // Drop optional steps if budget runs low
+}
+
 export interface AgentState {
-  // Session context
   session_id: string;
   session_data: SessionData | null;
-  
-  // Message flow
+  agent_config?: AgentConfig;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
   current_input: string;
-  
-  // Intent and action tracking
   detected_intent: IntentType;
   action_type: ActionType;
   action_params: Record<string, any>;
-  
-  // Wallet creation tracking
-  wallet_info?: {
-    publicKey: string;
-    secretKey?: string;
-    email?: string;
-    phoneNumber?: string;
-    createdAt: string;
-  };
-  waiting_for_wallet_input?: boolean;
-  
-  // Payment tracking (if applicable)
-  pending_payment?: {
-    xdr?: string;
-    destination: string;
-    amount: string;
-    asset_code: string;
-    destination_name?: string;
-    memo?: string;
-  };
-  
-  // Response
   response_message: string;
   success: boolean;
+  networkEvents?: any[];
   error?: string;
+  
+  // FORGE v3 Integrated State
+  budget?: TaskBudget;
+  activeEscrows?: EscrowContract[];
 }
 
 export enum IntentType {
-  LOGIN = "login",
-  ONBOARD = "onboard",
-  WALLET = "wallet",
-  WALLET_LOGOUT = "wallet_logout",
-  CONTACTS = "contacts",
-  PAYMENT = "payment",
-  BALANCE = "balance",
-  HISTORY = "history",
-  PIX = "pix",
+  DEFI = "defi",
+  NEWS = "news",
+  SECURITY = "security",
   GENERAL = "general",
 }
 
 export enum ActionType {
-  LOGIN_USER = "login_user",
-  CREATE_ACCOUNT = "create_account",
-  CREATE_WALLET = "create_wallet",
-  LOGOUT_WALLET = "logout_wallet",
-  LIST_CONTACTS = "list_contacts",
-  ADD_CONTACT = "add_contact",
-  GET_BALANCE = "get_account_balance",
-  GET_HISTORY = "get_operations_history",
-  LOOKUP_CONTACT = "lookup_contact",
-  BUILD_PAYMENT = "build_payment_xdr",
-  SIGN_PAYMENT = "sign_and_submit_xdr",
-  BUILD_PATH_PAYMENT = "build_path_payment_xdr",
-  INITIATE_PIX = "initiate_pix_deposit",
-  CHECK_PIX = "check_deposit_status",
+  GET_DEFI_DATA = "get_defi_data",
+  GET_NEWS = "get_news",
+  GET_SECURITY_AUDIT = "get_security_audit",
   NONE = "none",
 }
 

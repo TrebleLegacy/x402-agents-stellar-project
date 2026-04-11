@@ -70,13 +70,22 @@ export class AgentAPIClient {
     }
   ): AgentQueryResponse {
     const isSuccess = data?.status === 'success' || data?.success === true;
+    const backendTrace = Array.isArray(data?.trace)
+      ? (data.trace as AgentTraceEvent[])
+      : [];
+    const mergedTrace = [...(options?.trace || []), ...backendTrace];
+    const responseValue = data?.response;
+    const responseText =
+      typeof responseValue === 'string'
+        ? responseValue
+        : responseValue?.message || data?.message || '';
     return {
       session_id: data?.session_id || '',
-      response: data?.response || data?.message || '',
+      response: responseText,
       messages: data?.messages || [],
       status: isSuccess ? 'success' : 'error',
       error: isSuccess ? undefined : data?.error || data?.message || 'Unknown error',
-      trace: options?.trace || [],
+      trace: mergedTrace,
       agentDebug: (data?.debug || undefined) as AgentDebugInfo | undefined,
       paymentResponse: options?.paymentResponse,
     };
@@ -106,6 +115,7 @@ export class AgentAPIClient {
   async queryAgent(
     query: string,
     sessionId?: string,
+    agentConfig?: any,
     destination?: string
   ): Promise<AgentQueryResponse> {
     const trace: AgentTraceEvent[] = [
@@ -128,7 +138,7 @@ export class AgentAPIClient {
     try {
       const response = await this.client.post(
         '/api/agent/query',
-        { query, session_id: sessionId }
+        { query, session_id: sessionId, agent_config: agentConfig }
       );
       trace.push({
         at: new Date().toISOString(),
@@ -141,7 +151,35 @@ export class AgentAPIClient {
         stage: 'request_succeeded',
         detail: 'Agent query succeeded without payment',
       });
+      
+      if (response.data.networkEvents && Array.isArray(response.data.networkEvents)) {
+        response.data.networkEvents.forEach((ev: any) => this.emitLog(ev));
+      }
+      if (response.data.trace && Array.isArray(response.data.trace)) {
+        response.data.trace.forEach((event: any) => {
+          const source = ['agent', 'specialist', 'forge', 'sdk', 'network'].includes(event?.source)
+            ? event.source
+            : 'agent';
+          this.emitLog({
+            at: event?.at || new Date().toISOString(),
+            source,
+            stage: event?.stage || 'trace',
+            detail: event?.detail || 'Trace event',
+            payload: event?.payload,
+          });
+        });
+      }
+      if (response.data.debug) {
+        this.emitLog({
+          at: new Date().toISOString(),
+          source: 'agent',
+          stage: 'agent_debug',
+          detail: 'Agent reasoning snapshot',
+          payload: response.data.debug,
+        });
+      }
       return this.normalizeAgentResponse(response.data, { trace });
+  
     } catch (error: any) {
       if (error.response?.status === 402) {
         const instructions = (error.response.data?.instructions ||
@@ -240,7 +278,7 @@ export class AgentAPIClient {
         try {
           const retryResponse = await this.client.post(
             '/api/agent/query',
-            { query, session_id: sessionId },
+            { query, session_id: sessionId, agent_config: agentConfig },
             {
               headers: {
                 'Payment-Signature': paymentHeader,
@@ -276,7 +314,35 @@ export class AgentAPIClient {
             payload: paymentResponse,
           });
 
+          
+          if (retryResponse.data.networkEvents && Array.isArray(retryResponse.data.networkEvents)) {
+            retryResponse.data.networkEvents.forEach((ev: any) => this.emitLog(ev));
+          }
+          if (retryResponse.data.trace && Array.isArray(retryResponse.data.trace)) {
+            retryResponse.data.trace.forEach((event: any) => {
+              const source = ['agent', 'specialist', 'forge', 'sdk', 'network'].includes(event?.source)
+                ? event.source
+                : 'agent';
+              this.emitLog({
+                at: event?.at || new Date().toISOString(),
+                source,
+                stage: event?.stage || 'trace',
+                detail: event?.detail || 'Trace event',
+                payload: event?.payload,
+              });
+            });
+          }
+          if (retryResponse.data.debug) {
+            this.emitLog({
+              at: new Date().toISOString(),
+              source: 'agent',
+              stage: 'agent_debug',
+              detail: 'Agent reasoning snapshot',
+              payload: retryResponse.data.debug,
+            });
+          }
           return this.normalizeAgentResponse(retryResponse.data, {
+  
             trace,
             paymentResponse,
           });
@@ -315,12 +381,15 @@ export class AgentAPIClient {
     }
   }
 
-  async createSession(agentConfig: any): Promise<string> {
-    const response = await this.client.post<{ session_id: string }>(
+  async createSession(agentConfig: any): Promise<{ sessionId: string; bootMessage?: string }> {
+    const response = await this.client.post<{ session_id: string; boot_message?: string }>(
       '/api/agent/session',
       agentConfig
     );
-    return response.data.session_id;
+    return {
+      sessionId: response.data.session_id,
+      bootMessage: response.data.boot_message,
+    };
   }
 
   async getSessionHistory(
@@ -330,5 +399,200 @@ export class AgentAPIClient {
       `/api/agent/session/${sessionId}/history`
     );
     return response.data;
+  }
+
+  async chat(
+    config: any,
+    query: string,
+    sessionId?: string
+  ): Promise<AgentQueryResponse> {
+    return this.queryAgent(query, sessionId, config);
+  }
+
+  /**
+   * Call the advanced orchestrator endpoint with full LLM reasoning
+   * Returns streaming reasoning steps for each stage
+   */
+  async executeAdvancedOrchestrator(
+    task: string,
+    agentName: string,
+    budget: number = 1.0,
+    destinationAddress?: string,
+    onStage?: (stage: any) => void
+  ): Promise<any> {
+    this.emitLog({
+      at: new Date().toISOString(),
+      source: 'orchestrator',
+      stage: 'init',
+      detail: `Starting advanced orchestrator for "${task}"`,
+    });
+
+    try {
+      const response = await this.client.post(
+        '/api/orchestrator/execute',
+        {
+          task,
+          agentName,
+          budget,
+          destinationAddress,
+        },
+        {
+          responseType: 'stream',
+        }
+      );
+
+      return new Promise((resolve, reject) => {
+        let buffer = '';
+        let stages: any[] = [];
+
+        response.data.on('data', (chunk: Buffer) => {
+          buffer += chunk.toString();
+          const lines = buffer.split('\n\n');
+          buffer = lines[lines.length - 1];
+
+          for (let i = 0; i < lines.length - 1; i++) {
+            const line = lines[i].trim();
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                onStage?.(data);
+                stages.push(data);
+
+                this.emitLog({
+                  at: new Date().toISOString(),
+                  source: 'orchestrator',
+                  stage: data.stage || `stage-${data.step}`,
+                  detail: data.reasoning || data.decision,
+                  payload: {
+                    step: data.step,
+                    cost: data.cost,
+                    txHash: data.txHash,
+                  },
+                });
+              } catch (e) {
+                // Continue on parse error
+              }
+            }
+          }
+        });
+
+        response.data.on('end', () => {
+          resolve({
+            status: 'success',
+            stages,
+            response: 'Orchestration complete',
+          });
+        });
+
+        response.data.on('error', reject);
+      });
+    } catch (error: any) {
+      this.emitLog({
+        at: new Date().toISOString(),
+        source: 'orchestrator',
+        stage: 'error',
+        detail: `Orchestrator error: ${error.message}`,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Call the enhanced Forge Oracle endpoint
+   * Uses LLM-driven agent selection and real x402 payments
+   */
+  async forgeOracleWithReasoning(
+    task: string,
+    context?: string,
+    budget: number = 1.0,
+    onStage?: (stage: any) => void
+  ): Promise<any> {
+    this.emitLog({
+      at: new Date().toISOString(),
+      source: 'forge-oracle',
+      stage: 'init',
+      detail: `Forge Oracle initiated for "${task}"`,
+    });
+
+    try {
+      const response = await this.client.post(
+        '/api/forge/v2/oracle',
+        {
+          task,
+          context,
+          budget,
+        },
+        {
+          responseType: 'stream',
+        }
+      );
+
+      return new Promise((resolve, reject) => {
+        let buffer = '';
+        let stages: any[] = [];
+
+        response.data.on('data', (chunk: Buffer) => {
+          buffer += chunk.toString();
+          const lines = buffer.split('\n\n');
+          buffer = lines[lines.length - 1];
+
+          for (let i = 0; i < lines.length - 1; i++) {
+            const line = lines[i].trim();
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                onStage?.(data);
+                stages.push(data);
+
+                if (data.stage === 'agent-selection') {
+                  this.emitLog({
+                    at: new Date().toISOString(),
+                    source: 'forge-oracle',
+                    stage: 'agent-selection',
+                    detail: data.reasoning || 'Selecting agent',
+                    payload: {
+                      selectedAgent: data.selectedAgent,
+                      confidence: data.confidence,
+                    },
+                  });
+                } else if (data.stage === 'agent-execution') {
+                  this.emitLog({
+                    at: new Date().toISOString(),
+                    source: 'forge-oracle',
+                    stage: 'agent-execution',
+                    detail: data.reasoning || 'Executing agent',
+                    payload: {
+                      agent: data.agentName,
+                      paymentTxHash: data.paymentTxHash,
+                      cost: data.cost,
+                    },
+                  });
+                }
+              } catch (e) {
+                // Continue on parse error
+              }
+            }
+          }
+        });
+
+        response.data.on('end', () => {
+          resolve({
+            status: 'success',
+            stages,
+            response: 'Forge Oracle complete',
+          });
+        });
+
+        response.data.on('error', reject);
+      });
+    } catch (error: any) {
+      this.emitLog({
+        at: new Date().toISOString(),
+        source: 'forge-oracle',
+        stage: 'error',
+        detail: `Forge Oracle error: ${error.message}`,
+      });
+      throw error;
+    }
   }
 }

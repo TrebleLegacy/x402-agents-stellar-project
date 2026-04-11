@@ -85,7 +85,7 @@ export interface PaymentInstructions {
 
 export interface InteractionLogEvent {
   at: string;
-  source: 'agent' | 'specialist' | 'forge' | 'sdk';
+  source: 'agent' | 'specialist' | 'forge' | 'sdk' | 'network' | 'orchestrator' | 'forge-oracle';
   stage: string;
   detail: string;
   payload?: unknown;

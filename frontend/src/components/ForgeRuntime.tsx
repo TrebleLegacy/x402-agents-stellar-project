@@ -37,7 +37,7 @@ export default function ForgeRuntime({ apiUrl, onLog }: ForgeRuntimeProps) {
       at: new Date().toISOString(),
       source: 'forge',
       stage: 'runtime_started',
-      detail: 'Forge v2 execution started',
+      detail: 'Forge v3 execution started (Escrow & Stake activated)',
       payload: { amount, from, to },
     });
 
@@ -58,7 +58,7 @@ export default function ForgeRuntime({ apiUrl, onLog }: ForgeRuntimeProps) {
         at: new Date().toISOString(),
         source: 'forge',
         stage: 'runtime_succeeded',
-        detail: 'Forge v2 execution completed',
+        detail: 'Forge v3 execution completed',
         payload: { decision: data?.decision, execution: data?.execution },
       });
     } catch (err: any) {
@@ -67,7 +67,7 @@ export default function ForgeRuntime({ apiUrl, onLog }: ForgeRuntimeProps) {
         at: new Date().toISOString(),
         source: 'forge',
         stage: 'runtime_failed',
-        detail: 'Forge v2 execution failed',
+        detail: 'Forge v3 execution failed',
         payload: err.message,
       });
     } finally {
@@ -79,7 +79,7 @@ export default function ForgeRuntime({ apiUrl, onLog }: ForgeRuntimeProps) {
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Rocket className="w-4 h-4 text-amber-400" />
-        <p className="text-xs font-semibold text-amber-200 uppercase tracking-wider">Forge v2 Runtime</p>
+        <p className="text-xs font-semibold text-amber-200 uppercase tracking-wider">Forge v3 Runtime (Escrow & Staking)</p>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -114,7 +114,7 @@ export default function ForgeRuntime({ apiUrl, onLog }: ForgeRuntimeProps) {
         disabled={loading}
         className="w-full px-3 py-2 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-100 text-sm font-medium hover:bg-amber-500/30 disabled:opacity-60"
       >
-        {loading ? 'Executing Forge v2...' : 'Run Forge v2'}
+        {loading ? 'Executing Escrow & Settling...' : 'Run Forge v3 Execution'}
       </button>
 
       {error && (
@@ -132,15 +132,15 @@ export default function ForgeRuntime({ apiUrl, onLog }: ForgeRuntimeProps) {
                 <span>Decision</span>
               </div>
               <p className="mt-2 text-slate-400">{result.decision?.selectedAgent}</p>
-              <p className="text-slate-500">Score: {result.decision?.score}</p>
+              <p className="text-slate-500">{result.decision?.selection?.notes || 'Selection complete'}</p>
             </div>
             <div className="bg-slate-900/50 border border-slate-700 rounded p-2">
               <div className="flex items-center gap-2 text-sky-300">
                 <Timer className="w-3 h-3" />
-                <span>Bid Snapshot</span>
+                <span>Selection Snapshot</span>
               </div>
               <pre className="mt-2 text-[11px] text-slate-400 whitespace-pre-wrap break-words">
-                {JSON.stringify(result.decision?.bid, null, 2)}
+                {JSON.stringify(result.decision?.selection, null, 2)}
               </pre>
             </div>
           </div>
@@ -148,7 +148,7 @@ export default function ForgeRuntime({ apiUrl, onLog }: ForgeRuntimeProps) {
           <div className="bg-slate-900/50 border border-slate-700 rounded p-2">
             <div className="flex items-center gap-2 text-amber-300">
               <DollarSign className="w-3 h-3" />
-              <span>Bids</span>
+              <span>Bids & Capital Stakes</span>
             </div>
             <pre className="mt-2 text-[11px] text-slate-400 whitespace-pre-wrap break-words">
               {JSON.stringify(result.bids, null, 2)}
@@ -158,7 +158,7 @@ export default function ForgeRuntime({ apiUrl, onLog }: ForgeRuntimeProps) {
           <div className="bg-slate-900/50 border border-slate-700 rounded p-2">
             <div className="flex items-center gap-2 text-emerald-300">
               <ShieldCheck className="w-3 h-3" />
-              <span>Audits</span>
+              <span>Stake-Backed Audits</span>
             </div>
             <pre className="mt-2 text-[11px] text-slate-400 whitespace-pre-wrap break-words">
               {JSON.stringify(result.audits, null, 2)}
@@ -189,7 +189,7 @@ export default function ForgeRuntime({ apiUrl, onLog }: ForgeRuntimeProps) {
           <div className="bg-slate-900/50 border border-slate-700 rounded p-2">
             <div className="flex items-center gap-2 text-emerald-300">
               <CheckCircle2 className="w-3 h-3" />
-              <span>Execution</span>
+              <span>Escrow & Micro-market Execution</span>
             </div>
             <pre className="mt-2 text-[11px] text-slate-400 whitespace-pre-wrap break-words">
               {JSON.stringify(result.execution, null, 2)}

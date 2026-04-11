@@ -14,7 +14,7 @@ export default function AgentConfig({ onConfigSubmit, isLoading }: AgentConfigPr
     description: 'Default agent',
     systemPrompt: 'You are a helpful assistant.',
     model: 'gpt-4o',
-    temperature: 0.7,
+    temperature: 0.4,
     maxTokens: 2000,
   });
 

@@ -13,11 +13,14 @@ import actionsRouter from './api/routes/actions.router';
 import x402TestRouter from './api/routes/x402.test';
 import x402SdkRouter from './api/routes/x402.sdk.demo';
 import forgeRouter from './api/routes/forge';
+import networkRouter from './api/routes/network';
 import stellarTestRouter from './api/routes/stellar.test';
 import defiAgentRouter from './api/routes/defi.agent';
 import securityAgentRouter from './api/routes/security.agent';
 import newsAgentRouter from './api/routes/news.agent';
-import { createAgentRoutes } from './agents/routes';
+import advancedOrchestratorRouter from './api/routes/advanced-orchestrator';
+import orchestratorRouter from './api/routes/orchestrator';
+import agentRoutes from './agents/routes';
 import { AgentRepository } from './agents/repository';
 import { logger } from './utils/logger';
 import { x402PaymentMiddleware } from './api/middlewares/x402.middleware';
@@ -27,12 +30,12 @@ const port = Number(process.env.PORT) || 8000;
 const openaiApiKey = process.env.OPENAI_API_KEY || '';
 
 // Middleware
-const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001')
+const allowedOrigins = ('*')
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
 
-const allowAllOrigins = process.env.CORS_ALLOW_ALL === 'true';
+const allowAllOrigins = true;
 
 app.use(
   cors({
@@ -108,6 +111,7 @@ app.use('/api/actions', actionsRouter);
 app.use('/api/x402', x402TestRouter);
 app.use('/api/x402-sdk', x402SdkRouter);
 app.use('/api/forge', forgeRouter);
+app.use('/api/network', networkRouter);
 app.use('/api/stellar', stellarTestRouter);
 
 // Specialized Agent Routes (with x402 payment requirement)
@@ -115,9 +119,13 @@ app.use('/api/agents/defi', defiAgentRouter);
 app.use('/api/agents/security', securityAgentRouter);
 app.use('/api/agents/news', newsAgentRouter);
 
+// Advanced Orchestration Routes (LLM Reasoning + Real x402 Payments)
+app.use('/api/orchestrator', advancedOrchestratorRouter);
+app.use('/api/forge/v2', orchestratorRouter);
+
 // Agent routes
 const agentRepository = new AgentRepository();
-app.use('/api/agent', createAgentRoutes(agentRepository, openaiApiKey));
+app.use('/api/agent', agentRoutes);
 
 // Error handling
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

@@ -1,0 +1,18 @@
+=== Starting Comprehensive Tool Tests FORGE v3 at 2026-04-08T14:29:26.535Z ===
+
+
+[Agent] Trying prompt: "Quero criar uma carteira"
+Response:
+Para criar ou entrar na sua carteira Stellar, envie uma destas opções:
+
+1️⃣ **Email:** Seu endereço de e-mail
+2️⃣ **Telefone:** Seu número de telefone com DDD (ex: +55 11 999999999)
+3️⃣ **Chave privada (secret key):** para entrar/importar uma carteira existente
+
+Por favor, envie uma dessas informações para continuarmos!
+
+[Agent] Trying prompt: "Qual é o saldo da public key GARBAGE?"
+Response:
+Você precisa entrar em uma wallet antes de consultar o saldo.
+
+[Agent] Trying prompt: "Me dê as ultimas noticias de blockchain"

@@ -1,299 +1,133 @@
-/**
- * Agent service: orchestrates agent logic and Stellar operations
- */
-
-import { Router, Request, Response, NextFunction, RequestHandler } from "express";
+import { Router, Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { AgentState, IntentType, ActionType, SessionData } from "./types";
-import { AgentGraph } from "./graph";
+import { ChatOpenAI } from "@langchain/openai";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { AgentRepository } from "./repository";
+import { AgentGraph } from "./graph";
+import { AgentState, IntentType, ActionType } from "./types";
+import { requirePayment } from "../api/middlewares/requirePayment";
 import { logger } from "../utils/logger";
-import { StellarService } from "../api/services/stellar.service";
 
-/**
- * Validate if a string is a valid UUID
- */
-function isValidUUID(uuid: string): boolean {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(uuid);
-}
+const router = Router();
+const repository = new AgentRepository();
 
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    userId: string;
-    id?: string;
-    email?: string;
-  };
-}
+router.post("/session", async (req: Request, res: Response) => {
+  try {
+    const agentConfig = req.body || {};
+    const session_token = uuidv4();
 
-export function createAgentRoutes(
-  repository: AgentRepository,
-  openaiApiKey: string
-): Router {
-  const router = Router();
-  const agentGraph = new AgentGraph(repository, openaiApiKey);
+    await repository.saveSession(session_token, {
+      session_token,
+      user_id: "anonymous",
+      email: "",
+      created_at: new Date().toISOString(),
+      last_activity: new Date().toISOString(),
+    });
 
-  /**
-   * POST /api/agent/query
-   * Main endpoint for agent queries
-   */
-  router.post('/query', (async (
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const { query, session_id } = req.body;
+    const apiKey = process.env.OPENAI_API_KEY || "";
+    if (!apiKey) {
+      return res.status(500).json({ error: "OPENAI_API_KEY not configured" });
+    }
 
-      if (!query || typeof query !== "string") {
-        return res.status(400).json({ 
-          error: "Query is required",
-          session_id: session_id || null 
-        });
-      }
+    const llm = new ChatOpenAI({
+      temperature: agentConfig?.temperature ?? 0,
+      modelName: agentConfig?.model || "gpt-4o",
+      maxTokens: agentConfig?.maxTokens,
+      openAIApiKey: apiKey,
+    });
 
-      // Generate or validate session ID
-      let sessionId: string;
-      if (session_id) {
-        if (!isValidUUID(session_id)) {
-          return res.status(400).json({ 
-            error: "Invalid session_id format. Must be a valid UUID (e.g., 550e8400-e29b-41d4-a716-446655440000)" 
-          });
-        }
-        sessionId = session_id;
-      } else {
-        sessionId = uuidv4();
-      }
+    const systemPrompt = (agentConfig?.systemPrompt || `You are ${agentConfig?.name || "an agent"}.`).trim();
+    const bootPrompt = `Initialize and confirm readiness${agentConfig?.description ? ` for ${agentConfig.description}` : ""}. Provide a short greeting.`;
+    const response = await llm.invoke([
+      new SystemMessage(systemPrompt),
+      new HumanMessage(bootPrompt),
+    ]);
 
-      let sessionData = await repository.getSession(sessionId);
+    const boot_message = response.content.toString();
+    if (boot_message) {
+      await repository.saveMessage(session_token, "assistant", boot_message);
+    }
 
-      // Initialize session if not exists
-      if (!sessionData) {
-        sessionData = {
-          session_token: uuidv4(),
-          user_id: req.user?.userId || req.user?.id || `user_${Date.now()}`,
-          email: req.user?.email || 'unknown@example.com',
-          created_at: new Date().toISOString(),
-          last_activity: new Date().toISOString(),
-        };
-        await repository.saveSession(sessionId, sessionData);
-      }
+    return res.json({ session_id: session_token, boot_message });
+  } catch (error: any) {
+    logger.error(`Error creating agent session: ${error}`);
+    return res.status(500).json({ error: "Erro interno no servidor" });
+  }
+});
 
-      // On every new user message, remove previous assistant messages containing private keys.
-      // This ensures secret keys are only visible once and are not kept in conversation history.
-      await repository.deletePrivateKeyMessages(sessionId);
+router.post(["/chat", "/query"], requirePayment as any, async (req: Request, res: Response) => {
+  try {
+    const message = req.body.message || req.body.query;
+    let session_token = req.body.session_token || req.body.session_id;
+    const agentConfig = req.body.agent_config || req.body.agentConfig;
 
-      // Get previous state
-      const previousState = await repository.getState(sessionId);
-      const previousMessages = await repository.getMessages(sessionId, 10);
+    if (!message) {
+      return res.status(400).json({ error: "Mensagem é obrigatória" });
+    }
 
-      // Initialize state
-      const state: AgentState = {
-        session_id: sessionId,
-        session_data: sessionData,
-        messages: previousMessages,
-        current_input: query,
-        detected_intent: IntentType.GENERAL,
-        action_type: ActionType.NONE,
-        action_params: previousState?.action_params || {},
-        pending_payment: previousState?.pending_payment,
-        wallet_info: (previousState?.action_params as any)?.wallet_info,
-        waiting_for_wallet_input: Boolean((previousState?.action_params as any)?.waiting_for_wallet_input),
-        response_message: "",
-        success: false,
-      };
+    if (!session_token) {
+      session_token = uuidv4();
+      await repository.saveSession(session_token, {
+        session_token,
+        user_id: "anonymous",
+        email: "",
+        created_at: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+      });
+    }
 
-      // Process through agent graph
-      const resultState = await agentGraph.processInput(state);
+    const sessionData = await repository.getSession(session_token);
+    if (!sessionData) {
+      return res.status(401).json({ error: "Sessão inválida" });
+    }
 
-      logger.info(`Query processed for session: ${sessionId}`);
+    const previousState = await repository.getState(session_token);
+    const messages = await repository.getMessages(session_token);
 
-      return res.status(200).json({
-        session_id: sessionId,
+    const initialState: AgentState = {
+      session_id: session_token,
+      session_data: sessionData,
+      agent_config: agentConfig,
+      messages,
+      current_input: message,
+      detected_intent: IntentType.GENERAL,
+      action_type: ActionType.NONE,
+      action_params: {},
+      response_message: "",
+      success: false,
+    };
+
+    const apiKey = process.env.OPENAI_API_KEY || "";
+    const agentGraph = new AgentGraph(repository, apiKey, agentConfig);
+    const resultState = await agentGraph.processInput(initialState);
+
+    return res.json({
+      session_token,
+      session_id: session_token,
+      status: resultState.success ? "success" : "error",
+      success: resultState.success,
+      message: resultState.response_message,
+      response: {
         message: resultState.response_message,
+        task: resultState.action_type,
+        params: resultState.action_params,
+        success: resultState.success,
+        networkEvents: resultState.networkEvents,
+      },
+      networkEvents: resultState.networkEvents,
+      trace: resultState.networkEvents,
+      debug: {
         intent: resultState.detected_intent,
         action: resultState.action_type,
         success: resultState.success,
-        debug: {
-          intent: resultState.detected_intent,
-          action: resultState.action_type,
-          success: resultState.success,
-          waiting_for_wallet_input: resultState.waiting_for_wallet_input,
-          pending_payment: resultState.pending_payment
-            ? {
-                destination: resultState.pending_payment.destination,
-                destination_name: resultState.pending_payment.destination_name,
-                amount: resultState.pending_payment.amount,
-                asset_code: resultState.pending_payment.asset_code,
-              }
-            : undefined,
-          error: resultState.error,
-        },
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error in /query endpoint: ${errorMessage}`);
-      next(error);
-    }
-  }) as RequestHandler);
+        params: resultState.action_params,
+      },
+    });
 
-  /**
-   * GET /api/agent/session/:session_id
-   * Retrieve session information
-   */
-  router.get('/session/:session_id', (async (
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const { session_id } = req.params;
+  } catch (error: any) {
+    logger.error(`Error processing chat route: ${error}`);
+    return res.status(500).json({ error: "Erro interno no servidor" });
+  }
+});
 
-      if (!isValidUUID(session_id)) {
-        return res.status(400).json({ 
-          error: "Invalid session_id format. Must be a valid UUID." 
-        });
-      }
-
-      const sessionData = await repository.getSession(session_id);
-      if (!sessionData) {
-        return res.status(404).json({ error: "Session not found" });
-      }
-
-      const messages = await repository.getMessages(session_id);
-
-      return res.status(200).json({
-        session_id,
-        user_id: sessionData.user_id,
-        email: sessionData.email,
-        public_key: sessionData.public_key,
-        created_at: sessionData.created_at,
-        last_activity: sessionData.last_activity,
-        message_count: messages.length,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error in /session endpoint: ${errorMessage}`);
-      next(error);
-    }
-  }) as RequestHandler);
-
-  /**
-   * POST /api/agent/logout
-   * Logout and clear session
-   */
-  router.post('/logout', (async (
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const { session_id } = req.body;
-
-      if (!session_id) {
-        return res.status(400).json({ error: "Session ID is required" });
-      }
-      if (!isValidUUID(session_id)) {
-        return res.status(400).json({ 
-          error: "Invalid session_id format. Must be a valid UUID." 
-        });
-      }
-      if (!isValidUUID(session_id)) {
-        return res.status(400).json({ 
-          error: "Invalid session_id format. Must be a valid UUID." 
-        });
-      }
-
-      await repository.clearSession(session_id);
-      logger.info(`Session cleared: ${session_id}`);
-
-      return res.status(200).json({ success: true });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error in /logout endpoint: ${errorMessage}`);
-      next(error);
-    }
-  }) as RequestHandler);
-
-  /**
-   * POST /api/agent/login
-   * Handle user login through agent
-   */
-  router.post('/login', (async (
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const { email, password, session_id } = req.body;
-
-      if (!email || !password) {
-        return res.status(400).json({ error: "Email and password required" });
-      }
-
-      const sessionId = session_id || uuidv4();
-
-      // Query user from auth service (same endpoint used by frontend)
-      // For now, this is a placeholder. In production, call the user service.
-      logger.info(`Login attempt for: ${email}`);
-
-      const sessionData: SessionData = {
-        session_token: uuidv4(),
-        user_id: `user_${Date.now()}`, // In production, get from auth service
-        email,
-        created_at: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
-      };
-
-      await repository.saveSession(sessionId, sessionData);
-
-      return res.status(200).json({
-        session_id: sessionId,
-        message: `Bem-vindo, ${email}!`,
-        success: true,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error in /login endpoint: ${errorMessage}`);
-      next(error);
-    }
-  }) as RequestHandler);
-
-  /**
-   * GET /api/agent/balance/:session_id
-   * Get account balance for session
-   */
-  router.get('/balance/:session_id', (async (
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const { session_id } = req.params;
-
-      if (!isValidUUID(session_id)) {
-        return res.status(400).json({ 
-          error: "Invalid session_id format. Must be a valid UUID." 
-        });
-      }
-
-      const sessionData = await repository.getSession(session_id);
-
-      if (!sessionData || !sessionData.public_key) {
-        return res.status(401).json({ error: "Not authenticated" });
-      }
-
-      const balances = await StellarService.getAccountBalance(sessionData.public_key);
-      const native = balances.find((b: any) => b.asset_type === "native");
-      const balance = native?.balance || "0";
-
-      return res.status(200).json({ balance });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Error in /balance endpoint: ${errorMessage}`);
-      next(error);
-    }
-  }) as RequestHandler);
-
-  return router;
-}
+export default router;
