@@ -104,6 +104,16 @@ export default function AgentChat({
     return time || iso;
   };
 
+  const coerceMessageContent = (value: unknown) => {
+    if (typeof value === 'string') return value;
+    if (value === null || value === undefined) return '';
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  };
+
   useEffect(() => {
     scrollToBottom();
   }, [messages, logEvents]);
@@ -151,13 +161,21 @@ export default function AgentChat({
     const trimmed = content.trim();
     if (!trimmed) return;
 
+    const now = Date.now();
+    const userTimestamp = new Date(now).toISOString();
+    const placeholderTimestamp = new Date(now + 1).toISOString();
     const userMessage: Message = {
       role: 'user',
       content: trimmed,
-      timestamp: new Date().toISOString(),
+      timestamp: userTimestamp,
+    };
+    const placeholderMessage: Message = {
+      role: 'assistant',
+      content: '',
+      timestamp: placeholderTimestamp,
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages(prev => [...prev, userMessage, placeholderMessage]);
     setInputValue('');
     setError(null);
 
@@ -165,39 +183,42 @@ export default function AgentChat({
       // Call the actual agent
       const response = await onSendMessage(trimmed);
 
-      if (response.status === 'success') {
-        const assistantMessage: Message = {
-          role: 'assistant',
-          content: response.response,
-          timestamp: new Date().toISOString(),
-          trace: response.trace,
-          agentDebug: response.agentDebug,
-        };
-        setMessages(prev => [...prev, assistantMessage]);
-        
-        // Trigger orchestration flow visually
-        const bids = generateMockBids();
-        setAgentBids(bids);
-        
-        const stages = generateOrchestrationStages();
-        setOrchestrationStages(stages);
-        
-        const selected = bids.find(b => b.selectedForBid);
-        setSelectedAgent(selected || bids[0]);
-        
-        const cost = stages.reduce((sum, s) => sum + (s.cost || 0), 0);
-        setTotalCost(cost);
-      } else {
+      const assistantContent = coerceMessageContent(response.response) || response.error || '';
+      setMessages(prev => prev.map(msg => (
+        msg.timestamp === placeholderTimestamp
+          ? {
+              ...msg,
+              content: assistantContent,
+              trace: response.trace,
+              agentDebug: response.agentDebug,
+            }
+          : msg
+      )));
+
+      if (response.status !== 'success') {
         throw new Error(response.error || 'Unknown error');
       }
+
+      // Trigger orchestration flow visually
+      const bids = generateMockBids();
+      setAgentBids(bids);
+
+      const stages = generateOrchestrationStages();
+      setOrchestrationStages(stages);
+
+      const selected = bids.find(b => b.selectedForBid);
+      setSelectedAgent(selected || bids[0]);
+
+      const cost = stages.reduce((sum, s) => sum + (s.cost || 0), 0);
+      setTotalCost(cost);
     } catch (err: any) {
       setError(err.message || 'Failed to get response');
-      const errorMessage: Message = {
-        role: 'assistant',
-        content: `Error: ${err.message}`,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      const errorContent = `Error: ${err.message}`;
+      setMessages(prev => prev.map(msg => (
+        msg.timestamp === placeholderTimestamp
+          ? { ...msg, content: errorContent }
+          : msg
+      )));
     }
   };
 
