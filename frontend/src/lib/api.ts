@@ -21,6 +21,30 @@ export class AgentAPIClient {
         'Content-Type': 'application/json',
       },
     });
+    
+    // Add global response logging interceptor
+    this.client.interceptors.response.use(
+      response => {
+        console.log('[axios-interceptor] Response received:', {
+          status: response.status,
+          url: response.config.url,
+          dataKeys: Object.keys(response.data || {}),
+          hasMessage: !!response.data?.message,
+          hasResponse: !!response.data?.response,
+          dataPreview: JSON.stringify(response.data).slice(0, 200),
+        });
+        return response;
+      },
+      error => {
+        console.log('[axios-interceptor] Error response:', {
+          status: error.response?.status,
+          url: error.config?.url,
+          errorMessage: error.message,
+        });
+        return Promise.reject(error);
+      }
+    );
+    
     this.paymentClient = new X402PaymentClient(network);
   }
 
@@ -69,6 +93,17 @@ export class AgentAPIClient {
       paymentResponse?: Record<string, unknown>;
     }
   ): AgentQueryResponse {
+    console.log('[normalizeAgentResponse] Input data structure:', {
+      dataIsNull: data === null,
+      dataIsUndefined: data === undefined,
+      hasResponse: !!data?.response,
+      hasMessage: !!data?.message,
+      responseType: typeof data?.response,
+      responseKeys: data?.response ? Object.keys(data.response) : [],
+      dataKeys: Object.keys(data || {}),
+      fullData: JSON.stringify(data).slice(0, 300),
+    });
+
     const isSuccess = data?.status === 'success' || data?.success === true;
     const backendTrace = Array.isArray(data?.trace)
       ? (data.trace as AgentTraceEvent[])
@@ -78,16 +113,34 @@ export class AgentAPIClient {
     let responseText = '';
     
     if (typeof responseValue === 'string') {
+      console.log('[normalizeAgentResponse] Response is string');
       responseText = responseValue;
     } else if (responseValue?.message) {
+      console.log('[normalizeAgentResponse] Response has .message property', { 
+        messageLength: responseValue.message.length,
+        messagePreview: responseValue.message.slice(0, 100)
+      });
       responseText = responseValue.message;
     } else if (data?.message) {
+      console.log('[normalizeAgentResponse] Using data.message fallback', {
+        messageLength: data.message.length
+      });
       responseText = data.message;
     } else if (data?.response) {
+      console.log('[normalizeAgentResponse] JSON stringifying response');
       responseText = JSON.stringify(data.response);
     } else {
+      console.log('[normalizeAgentResponse] NO RESPONSE FOUND - using fallback');
       responseText = '(No response returned from the backend)';
     }
+
+    console.log('[normalizeAgentResponse] Final response text:', {
+      length: responseText.length,
+      preview: responseText.slice(0, 100),
+      isEmpty: responseText.trim().length === 0,
+      responseIfEmpty: responseText.trim().length === 0 ? 'EMPTY__RESPONSE' : 'HAS__CONTENT',
+    });
+
     return {
       session_id: data?.session_id || '',
       response: responseText,
@@ -149,6 +202,16 @@ export class AgentAPIClient {
         '/api/agent/query',
         { query, session_id: sessionId, agent_config: agentConfig }
       );
+      
+      console.log('[queryAgent] Raw response received:', {
+        status: response.status,
+        dataKeys: Object.keys(response.data || {}),
+        hasMessage: !!response.data?.message,
+        hasResponse: !!response.data?.response,
+        messageValue: response.data?.message?.slice?.(0, 100),
+        responseValue: response.data?.response,
+      });
+
       trace.push({
         at: new Date().toISOString(),
         stage: 'request_succeeded',
@@ -187,7 +250,15 @@ export class AgentAPIClient {
           payload: response.data.debug,
         });
       }
-      return this.normalizeAgentResponse(response.data, { trace });
+      
+      const normalized = this.normalizeAgentResponse(response.data, { trace });
+      console.log('[queryAgent] Normalized response:', {
+        responseLength: normalized.response.length,
+        status: normalized.status,
+        hasError: !!normalized.error,
+        responsePreview: normalized.response.slice(0, 100),
+      });
+      return normalized;
   
     } catch (error: any) {
       if (error.response?.status === 402) {
@@ -350,11 +421,17 @@ export class AgentAPIClient {
               payload: retryResponse.data.debug,
             });
           }
-          return this.normalizeAgentResponse(retryResponse.data, {
-  
+          const normalizedRetry = this.normalizeAgentResponse(retryResponse.data, {
             trace,
             paymentResponse,
           });
+          console.log('[queryAgent] Normalized RETRY response (after payment):', {
+            responseLength: normalizedRetry.response.length,
+            status: normalizedRetry.status,
+            hasError: !!normalizedRetry.error,
+            responsePreview: normalizedRetry.response.slice(0, 100),
+          });
+          return normalizedRetry;
         } catch (retryError: any) {
           trace.push({
             at: new Date().toISOString(),

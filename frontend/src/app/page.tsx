@@ -107,6 +107,8 @@ export default function Home() {
     }
 
     setIsLoading(true);
+    console.log('[page.handleSendMessage] Starting message send', { message: message.slice(0, 50) });
+    
     pushLog({
       at: new Date().toISOString(),
       source: 'network',
@@ -116,7 +118,16 @@ export default function Home() {
     });
 
     try {
+      console.log('[page.handleSendMessage] Calling apiClient.chat');
       const response = await apiClient.chat(agentConfig, message, sessionId);
+      
+      console.log('[page.handleSendMessage] Response returned', {
+        hasResponse: !!response.response,
+        responseLength: response.response?.length,
+        status: response.status,
+        responsePreview: response.response?.slice(0, 100)
+      });
+      
       pushLog({
         at: new Date().toISOString(),
         source: 'agent',
@@ -126,6 +137,7 @@ export default function Home() {
       });
       return response;
     } catch (error: any) {
+      console.error('[page.handleSendMessage] Error caught', { error: error.message });
       pushLog({
         at: new Date().toISOString(),
         source: 'forge',

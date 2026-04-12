@@ -101,6 +101,8 @@ router.post(["/chat", "/query"], requirePayment as any, async (req: Request, res
     const agentGraph = new AgentGraph(repository, apiKey, agentConfig);
     const resultState = await agentGraph.processInput(initialState);
 
+    logger.info(`[Routes] Agent processing complete - response_message: "${resultState.response_message?.slice(0, 100) || 'EMPTY'}"`);
+
     return res.json({
       session_token,
       session_id: session_token,

@@ -62,16 +62,36 @@ export default function AgentChat({
   const [orchestrationStages, setOrchestrationStages] = useState<StageStatus[]>([]);
   const [totalCost, setTotalCost] = useState(0);
   const [selectedAgent, setSelectedAgent] = useState<AgentBid | null>(null);
+  const [forceUpdateCounter, setForceUpdateCounter] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const autoSentRef = useRef(false);
   const messageCounterRef = useRef(0);
+  const messagesRefForDirectUpdate = useRef<Message[]>([]);
 
   const nextMessageId = () => {
     messageCounterRef.current += 1;
-    return `${Date.now()}-${messageCounterRef.current}`;
+    return `msg-${Date.now()}-${messageCounterRef.current}`;
+  };
+
+  const setMessagesWithRef = (updater: Message[] | ((prev: Message[]) => Message[])) => {
+    setMessages(prevMessages => {
+      const newMessages = typeof updater === 'function' ? updater(prevMessages) : updater;
+      messagesRefForDirectUpdate.current = newMessages;
+      console.log('[setMessagesWithRef] Updated messages ref and state', {
+        totalMessages: newMessages.length,
+        forceCounter: forceUpdateCounter
+      });
+      return newMessages;
+    });
+    setForceUpdateCounter(c => c + 1);
   };
 
   const timeline = useMemo(() => {
+    console.log('[timeline] Recalculating timeline', { 
+      messageCount: messages.length, 
+      forceCounter: forceUpdateCounter,
+      firstMsg: messages[0]?.content?.slice(0, 30)
+    });
     const messageItems = messages.map((message, index) => ({
       kind: 'message' as const,
       key: message.id || `msg-${index}-${message.timestamp || 'na'}`,
@@ -100,7 +120,7 @@ export default function AgentChat({
       }
       return timeA - timeB;
     });
-  }, [logEvents, messages, showInlineLogs]);
+  }, [logEvents, messages, showInlineLogs, forceUpdateCounter]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -123,8 +143,17 @@ export default function AgentChat({
   };
 
   useEffect(() => {
+    console.log('[useEffect messages changed] Current messages:', {
+      count: messages.length,
+      lastMessage: messages[messages.length - 1]?.content?.slice(0, 50),
+      hasAssistant: messages.some(m => m.role === 'assistant'),
+    });
     scrollToBottom();
   }, [messages, logEvents]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [forceUpdateCounter]);
 
   const generateMockBids = (): AgentBid[] => {
     const baseAgents = [
@@ -174,6 +203,9 @@ export default function AgentChat({
     const placeholderTimestamp = new Date(now + 1).toISOString();
     const userId = nextMessageId();
     const placeholderId = nextMessageId();
+    
+    console.log('[SubmitMessage] Creating user and placeholder messages', { userId, placeholderId });
+    
     const userMessage: Message = {
       id: userId,
       role: 'user',
@@ -187,25 +219,61 @@ export default function AgentChat({
       timestamp: placeholderTimestamp,
     };
 
-    setMessages(prev => [...prev, userMessage, placeholderMessage]);
+    setMessagesWithRef(prev => {
+      const newMessages = [...prev, userMessage, placeholderMessage];
+      console.log('[SubmitMessage] Messages state updated with placeholder', { 
+        newMessagesCount: newMessages.length,
+        lastMessage: newMessages[newMessages.length - 1]
+      });
+      return newMessages;
+    });
+    
     setInputValue('');
     setError(null);
 
     try {
-      // Call the actual agent
+      console.log('[SubmitMessage] Calling onSendMessage', { query: trimmed.slice(0, 50) });
       const response = await onSendMessage(trimmed);
+      
+      console.log('[SubmitMessage] Response received', { 
+        responseText: response.response?.slice(0, 100) || 'EMPTY',
+        hasTrace: !!response.trace?.length,
+        hasDebug: !!response.agentDebug,
+        status: response.status
+      });
 
-      const assistantContent = coerceMessageContent(response.response) || response.error || '';
-      setMessages(prev => prev.map(msg => (
-        msg.id === placeholderId
-          ? {
+      const assistantContent = coerceMessageContent(response.response) || response.error || '(Empty response from agent)';
+      
+      console.log('[SubmitMessage] Coerced assistant content', { 
+        contentLength: assistantContent.length,
+        contentPreview: assistantContent.slice(0, 100)
+      });
+
+      setMessagesWithRef(prev => {
+        const updated = prev.map(msg => {
+          if (msg.id === placeholderId) {
+            console.log('[SubmitMessage] UPDATING PLACEHOLDER MESSAGE', { 
+              oldContent: msg.content,
+              newContent: assistantContent.slice(0, 100),
+              willHaveTrace: !!response.trace?.length
+            });
+            return {
               ...msg,
               content: assistantContent,
               trace: response.trace,
               agentDebug: response.agentDebug,
-            }
-          : msg
-      )));
+            };
+          }
+          return msg;
+        });
+        console.log('[SubmitMessage] Messages updated with response', {
+          totalMessages: updated.length,
+          assistantMessages: updated.filter(m => m.role === 'assistant').length,
+          placeholderFound: updated.some(m => m.id === placeholderId),
+          updatedMessageContent: updated.find(m => m.id === placeholderId)?.content?.slice?.(0, 50)
+        });
+        return updated;
+      });
 
       if (response.status !== 'success') {
         throw new Error(response.error || 'Unknown error');
@@ -224,13 +292,16 @@ export default function AgentChat({
       const cost = stages.reduce((sum, s) => sum + (s.cost || 0), 0);
       setTotalCost(cost);
     } catch (err: any) {
+      console.error('[SubmitMessage] Error occurred', { error: err.message });
       setError(err.message || 'Failed to get response');
       const errorContent = `Error: ${err.message}`;
-      setMessages(prev => prev.map(msg => (
-        msg.id === placeholderId
-          ? { ...msg, content: errorContent }
-          : msg
-      )));
+      setMessagesWithRef(prev => 
+        prev.map(msg => 
+          msg.id === placeholderId
+            ? { ...msg, content: errorContent }
+            : msg
+        )
+      );
     }
   };
 

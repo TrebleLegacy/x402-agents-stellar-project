@@ -201,6 +201,7 @@ Se for conversa genérica, defina winner como "General".`;
     
     if (!state.success && state.error) {
       state.response_message = `Ocorreu um erro ao processar sua solicitação: ${state.error}`;
+      logger.info(`[Agent] Response set to error message: ${state.response_message.slice(0, 50)}`);
       return state;
     }
 
@@ -211,6 +212,7 @@ Se for conversa genérica, defina winner como "General".`;
         new HumanMessage(state.current_input)
       ]);
       state.response_message = response.content.toString();
+      logger.info(`[Agent] General response generated: "${state.response_message.slice(0, 100)}"`);
       state.success = true;
       return state;
     }
@@ -225,11 +227,13 @@ Se for conversa genérica, defina winner como "General".`;
       ]);
 
       state.response_message = response.content.toString();
+      logger.info(`[Agent] Tool response generated: "${state.response_message.slice(0, 100)}"`);
       state.success = true;
       return state;
     }
 
     state.response_message = "Não foi possível concluir a operação.";
+    logger.info(`[Agent] Fallback response set: "${state.response_message}"`);
     state.success = false;
     return state;
   }
