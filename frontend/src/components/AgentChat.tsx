@@ -62,8 +62,15 @@ export default function AgentChat({
   const [orchestrationStages, setOrchestrationStages] = useState<StageStatus[]>([]);
   const [totalCost, setTotalCost] = useState(0);
   const [selectedAgent, setSelectedAgent] = useState<AgentBid | null>(null);
+  const [mounted, setMounted] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const autoSentRef = useRef(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
 
   const timeline = useMemo(() => {
     const messageItems = messages.map((message, index) => ({
@@ -155,19 +162,6 @@ export default function AgentChat({
     setError(null);
 
     try {
-      // Trigger orchestration flow visually
-      const bids = generateMockBids();
-      setAgentBids(bids);
-      
-      const stages = generateOrchestrationStages();
-      setOrchestrationStages(stages);
-      
-      const selected = bids.find(b => b.selectedForBid);
-      setSelectedAgent(selected || bids[0]);
-      
-      const cost = stages.reduce((sum, s) => sum + (s.cost || 0), 0);
-      setTotalCost(cost);
-
       // Call the actual agent
       const response = await onSendMessage(trimmed);
 
@@ -180,6 +174,19 @@ export default function AgentChat({
           agentDebug: response.agentDebug,
         };
         setMessages(prev => [...prev, assistantMessage]);
+        
+        // Trigger orchestration flow visually
+        const bids = generateMockBids();
+        setAgentBids(bids);
+        
+        const stages = generateOrchestrationStages();
+        setOrchestrationStages(stages);
+        
+        const selected = bids.find(b => b.selectedForBid);
+        setSelectedAgent(selected || bids[0]);
+        
+        const cost = stages.reduce((sum, s) => sum + (s.cost || 0), 0);
+        setTotalCost(cost);
       } else {
         throw new Error(response.error || 'Unknown error');
       }
