@@ -325,9 +325,21 @@ export default function AgentChat({
                             : 'bg-slate-800 text-slate-100'
                         }`}
                       >
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                          {item.message.content}
-                        </p>
+                        {item.message.role === 'user' ? (
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                            {item.message.content}
+                          </p>
+                        ) : (
+                          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 mt-2 mb-3 shadow-inner">
+                            <h4 className="flex items-center gap-2 text-[11px] font-bold text-emerald-400 mb-2 uppercase tracking-widest">
+                              <Sparkles className="w-3 h-3" />
+                              Final Response
+                            </h4>
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-slate-200">
+                              {item.message.content || <span className="text-slate-500 italic">No final response generated or returned by API.</span>}
+                            </p>
+                          </div>
+                        )}
 
                         {item.message.role === 'assistant' && (item.message.trace?.length || item.message.agentDebug) ? (
                           <div className="mt-3 pt-3 border-t border-slate-700/70 space-y-2">
