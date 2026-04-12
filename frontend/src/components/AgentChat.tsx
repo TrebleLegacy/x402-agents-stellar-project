@@ -62,13 +62,8 @@ export default function AgentChat({
   const [orchestrationStages, setOrchestrationStages] = useState<StageStatus[]>([]);
   const [totalCost, setTotalCost] = useState(0);
   const [selectedAgent, setSelectedAgent] = useState<AgentBid | null>(null);
-  const [mounted, setMounted] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const autoSentRef = useRef(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const timeline = useMemo(() => {
     const messageItems = messages.map((message, index) => ({
@@ -78,8 +73,9 @@ export default function AgentChat({
       order: index,
       message,
     }));
+    const hasAssistantMessage = messageItems.some(item => item.message.role === 'assistant');
     const logItems =
-      showInlineLogs !== false && logEvents?.length
+      showInlineLogs !== false && logEvents?.length && hasAssistantMessage
         ? logEvents.map((log, index) => ({
             kind: 'log' as const,
             key: `log-${index}-${log.at}-${log.stage}`,
@@ -100,6 +96,12 @@ export default function AgentChat({
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const formatTimestamp = (iso?: string) => {
+    if (!iso) return '';
+    const time = iso.slice(11, 19);
+    return time || iso;
   };
 
   useEffect(() => {
@@ -220,8 +222,6 @@ export default function AgentChat({
     submitMessage(autoMessage);
   }, [autoMessage, isLoading, isPaying, messages.length, onAutoMessageSent, sessionId]);
 
-  if (!mounted) return null;
-
   return (
     <div className="flex flex-col h-full bg-slate-950">
       <div className="flex flex-col gap-1 px-6 py-4 border-b border-slate-800 bg-slate-900/50">
@@ -301,8 +301,8 @@ export default function AgentChat({
                             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                             <span className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">{item.log.source}</span>
                             <span className="text-[10px] text-emerald-600">·</span>
-                            <span suppressHydrationWarning className="text-[10px] text-emerald-400 font-mono">
-                              {new Date(item.log.at).toLocaleTimeString()}
+                            <span className="text-[10px] text-emerald-400 font-mono">
+                              {formatTimestamp(item.log.at)}
                             </span>
                           </div>
                         </div>
@@ -353,8 +353,8 @@ export default function AgentChat({
                                     <span className="font-semibold text-emerald-400">
                                       {event.stage}
                                     </span>
-                                    <span suppressHydrationWarning className="text-slate-500">
-                                      {new Date(event.at).toLocaleTimeString()}
+                                    <span className="text-slate-500">
+                                      {formatTimestamp(event.at)}
                                     </span>
                                   </div>
                                   <p>{event.detail}</p>
@@ -387,8 +387,8 @@ export default function AgentChat({
                     ) : null}
 
                     {item.message.timestamp && (
-                      <p suppressHydrationWarning className="text-xs mt-1 opacity-70">
-                        {new Date(item.message.timestamp).toLocaleTimeString()}
+                      <p className="text-xs mt-1 opacity-70">
+                        {formatTimestamp(item.message.timestamp)}
                       </p>
                     )}
                   </div>
