@@ -103,14 +103,19 @@ router.post(["/chat", "/query"], requirePayment as any, async (req: Request, res
 
     logger.info(`[Routes] Agent processing complete - response_message: "${resultState.response_message?.slice(0, 100) || 'EMPTY'}"`);
 
-    return res.json({
+    // CRITICAL: Ensure response_message is NEVER undefined or empty in final response
+    const finalResponseMessage = resultState.response_message && resultState.response_message.trim().length > 0
+      ? resultState.response_message
+      : `Agent processing completed successfully but no explicit response was generated. Intent: ${resultState.detected_intent}, Action: ${resultState.action_type}`;
+
+    const responsePayload = {
       session_token,
       session_id: session_token,
       status: resultState.success ? "success" : "error",
       success: resultState.success,
-      message: resultState.response_message,
+      message: finalResponseMessage,
       response: {
-        message: resultState.response_message,
+        message: finalResponseMessage,
         task: resultState.action_type,
         params: resultState.action_params,
         success: resultState.success,
@@ -124,7 +129,15 @@ router.post(["/chat", "/query"], requirePayment as any, async (req: Request, res
         success: resultState.success,
         params: resultState.action_params,
       },
+    };
+
+    logger.info(`[Routes] Sending response payload:`, {
+      messageLength: finalResponseMessage.length,
+      hasResponseMessage: !!responsePayload.response.message,
+      payloadKeys: Object.keys(responsePayload),
     });
+
+    return res.json(responsePayload);
 
   } catch (error: any) {
     logger.error(`Error processing chat route: ${error}`);

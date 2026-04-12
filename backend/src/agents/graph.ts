@@ -255,6 +255,12 @@ Se for conversa genérica, defina winner como "General".`;
       state = await this.executeAction(state);
       state = await this.generateResponse(state);
       
+      // CRITICAL: Ensure response_message is NEVER undefined
+      if (!state.response_message || state.response_message.trim().length === 0) {
+        logger.warn(`[Graph] response_message is empty after generateResponse, setting fallback`);
+        state.response_message = `Agent processed your query successfully. Intent: ${state.detected_intent}, Action: ${state.action_type}`;
+      }
+      
       // Save messages & state
       await this.repository.saveMessage(state.session_id, "user", state.current_input);
       await this.repository.saveMessage(state.session_id, "assistant", state.response_message);
@@ -265,7 +271,7 @@ Se for conversa genérica, defina winner como "General".`;
       logger.error(`[GraphExecutionError] ${error.message}`);
       initialState.success = false;
       initialState.error = error.message;
-      initialState.response_message = "Desculpe, ocorreu um erro interno na orquestração dos agentes.";
+      initialState.response_message = `Agent encountered an error: ${error.message}. This has been logged for investigation.`;
       this.pushEvent(initialState, 'fatal_error', error.message);
       return initialState;
     }
