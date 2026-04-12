@@ -196,6 +196,20 @@ export default function AgentChat({
     scrollToBottom();
   }, [forceUpdateCounter]);
 
+  useEffect(() => {
+    if (pendingResponse) {
+      console.log('[useEffect pendingResponse] Pending response state changed', {
+        id: pendingResponse.id,
+        contentLength: pendingResponse.content.length,
+        hasTrace: !!pendingResponse.trace?.length,
+      });
+      // Force a re-render by incrementing counter
+      requestAnimationFrame(() => {
+        setForceUpdateCounter(c => c + 1);
+      });
+    }
+  }, [pendingResponse]);
+
   const generateMockBids = (): AgentBid[] => {
     const baseAgents = [
       { name: 'DeFiAnalyzer', icon: '📊', caps: ['defi-metrics', 'protocol-analysis'] },
