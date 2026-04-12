@@ -203,12 +203,19 @@ export default function AgentChat({
         contentLength: pendingResponse.content.length,
         hasTrace: !!pendingResponse.trace?.length,
       });
+      // Ensure the pending response is merged into timeline immediately
+      console.log('[useEffect pendingResponse] Current messages snapshot:', {
+        totalMessages: messages.length,
+        messageIds: messages.map(m => m.id).slice(-3), // Last 3
+      });
+      
       // Force a re-render by incrementing counter
       requestAnimationFrame(() => {
+        console.log('[uEffect pendingResponse] Triggering force-update via requestAnimationFrame');
         setForceUpdateCounter(c => c + 1);
       });
     }
-  }, [pendingResponse]);
+  }, [pendingResponse, messages.length]);
 
   const generateMockBids = (): AgentBid[] => {
     const baseAgents = [
@@ -342,6 +349,9 @@ export default function AgentChat({
         return updated;
       });
 
+      // Clear pending response after merging into permanent state
+      setPendingResponse(null);
+
       if (response.status !== 'success') {
         throw new Error(response.error || 'Unknown error');
       }
@@ -363,11 +373,13 @@ export default function AgentChat({
       setError(err.message || 'Failed to get response');
       const errorContent = `Error: ${err.message}`;
       
+      // Show error in pending response immediately
       setPendingResponse({
         id: placeholderId,
         content: errorContent,
       });
 
+      // Also persist to messages for consistency
       setMessagesWithRef(prev => 
         prev.map(msg => 
           msg.id === placeholderId
@@ -375,6 +387,11 @@ export default function AgentChat({
             : msg
         )
       );
+
+      // Clear pending response after a delay to let messages take over
+      setTimeout(() => {
+        setPendingResponse(null);
+      }, 100);
     }
   };
 
