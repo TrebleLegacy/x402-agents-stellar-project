@@ -75,10 +75,19 @@ export class AgentAPIClient {
       : [];
     const mergedTrace = [...(options?.trace || []), ...backendTrace];
     const responseValue = data?.response;
-    const responseText =
-      typeof responseValue === 'string'
-        ? responseValue
-        : responseValue?.message || data?.message || '';
+    let responseText = '';
+    
+    if (typeof responseValue === 'string') {
+      responseText = responseValue;
+    } else if (responseValue?.message) {
+      responseText = responseValue.message;
+    } else if (data?.message) {
+      responseText = data.message;
+    } else if (data?.response) {
+      responseText = JSON.stringify(data.response);
+    } else {
+      responseText = '(No response returned from the backend)';
+    }
     return {
       session_id: data?.session_id || '',
       response: responseText,
