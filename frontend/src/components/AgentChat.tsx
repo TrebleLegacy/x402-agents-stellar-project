@@ -292,7 +292,7 @@ export default function AgentChat({
             {/* Messages */}
             {timeline.length > 0 && (
               <div className="space-y-3">
-                {timeline.map((item) => (
+                {timeline.map((item) =>
                   item.kind === 'log' ? (
                     <div key={item.key} className="pl-2 border-l-2 border-emerald-500/50">
                       <div className="px-3 py-2 rounded-lg bg-emerald-950/40 border border-emerald-900/60 text-xs space-y-1">
@@ -343,59 +343,59 @@ export default function AgentChat({
                                 <summary className="px-3 py-2 text-xs text-emerald-300 cursor-pointer font-medium">
                                   Execution Trace
                                 </summary>
-                            <div className="px-3 pb-3 space-y-2">
-                              {item.message.trace.map((event, traceIdx) => (
-                                <div
-                                  key={traceIdx}
-                                  className="text-xs text-slate-300 bg-slate-950/70 rounded border border-slate-800 p-2 space-y-1"
-                                >
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="font-semibold text-emerald-400">
-                                      {event.stage}
-                                    </span>
-                                    <span className="text-slate-500">
-                                      {formatTimestamp(event.at)}
-                                    </span>
-                                  </div>
-                                  <p>{event.detail}</p>
-                                  {event.payload !== undefined && (
-                                    <pre className="text-[11px] text-slate-400 whitespace-pre-wrap break-words bg-slate-950 p-2 rounded border border-slate-800 overflow-x-auto">
-                                      {JSON.stringify(event.payload, null, 2)}
-                                    </pre>
-                                  )}
+                                <div className="px-3 pb-3 space-y-2">
+                                  {item.message.trace.map((event, traceIdx) => (
+                                    <div
+                                      key={traceIdx}
+                                      className="text-xs text-slate-300 bg-slate-950/70 rounded border border-slate-800 p-2 space-y-1"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="font-semibold text-emerald-400">
+                                          {event.stage}
+                                        </span>
+                                        <span className="text-slate-500">
+                                          {formatTimestamp(event.at)}
+                                        </span>
+                                      </div>
+                                      <p>{event.detail}</p>
+                                      {event.payload !== undefined && (
+                                        <pre className="text-[11px] text-slate-400 whitespace-pre-wrap break-words bg-slate-950 p-2 rounded border border-slate-800 overflow-x-auto">
+                                          {JSON.stringify(event.payload, null, 2)}
+                                        </pre>
+                                      )}
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
-                            </div>
-                          </details>
-                        ) : null}
+                              </details>
+                            ) : null}
 
-                        {item.message.agentDebug && renderRichAgentCard(item.message.agentDebug)}
+                            {item.message.agentDebug && renderRichAgentCard(item.message.agentDebug)}
 
-                        {item.message.agentDebug ? (
-                          <details className="bg-slate-900/60 rounded border border-slate-700">
-                            <summary className="px-3 py-2 text-xs text-blue-300 cursor-pointer font-medium">
-                              Agent Reasoning Snapshot
-                            </summary>
-                            <div className="px-3 pb-3">
-                              <pre className="text-[11px] text-slate-300 whitespace-pre-wrap break-words bg-slate-950 p-2 rounded border border-slate-800 overflow-x-auto">
-                                {JSON.stringify(item.message.agentDebug, null, 2)}
-                              </pre>
-                            </div>
-                          </details>
+                            {item.message.agentDebug ? (
+                              <details className="bg-slate-900/60 rounded border border-slate-700">
+                                <summary className="px-3 py-2 text-xs text-blue-300 cursor-pointer font-medium">
+                                  Agent Reasoning Snapshot
+                                </summary>
+                                <div className="px-3 pb-3">
+                                  <pre className="text-[11px] text-slate-300 whitespace-pre-wrap break-words bg-slate-950 p-2 rounded border border-slate-800 overflow-x-auto">
+                                    {JSON.stringify(item.message.agentDebug, null, 2)}
+                                  </pre>
+                                </div>
+                              </details>
+                            ) : null}
+                          </div>
                         ) : null}
                       </div>
-                    ) : null}
 
-                    {item.message.timestamp && (
-                      <p className="text-xs mt-1 opacity-70">
-                        {formatTimestamp(item.message.timestamp)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )
-            ))}
-            <div ref={messagesEndRef} />
+                      {item.message.timestamp && (
+                        <p className="text-xs mt-1 opacity-70">
+                          {formatTimestamp(item.message.timestamp)}
+                        </p>
+                      )}
+                    </div>
+                  )
+                )}
+                <div ref={messagesEndRef} />
               </div>
             )}
           </>
