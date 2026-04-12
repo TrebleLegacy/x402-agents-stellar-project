@@ -70,8 +70,6 @@ export default function AgentChat({
     setMounted(true);
   }, []);
 
-  if (!mounted) return null;
-
   const timeline = useMemo(() => {
     const messageItems = messages.map((message, index) => ({
       kind: 'message' as const,
@@ -221,6 +219,8 @@ export default function AgentChat({
     onAutoMessageSent?.();
     submitMessage(autoMessage);
   }, [autoMessage, isLoading, isPaying, messages.length, onAutoMessageSent, sessionId]);
+
+  if (!mounted) return null;
 
   return (
     <div className="flex flex-col h-full bg-slate-950">
