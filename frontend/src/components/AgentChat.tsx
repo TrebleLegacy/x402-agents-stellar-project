@@ -68,6 +68,7 @@ export default function AgentChat({
   const autoSentRef = useRef(false);
   const messageCounterRef = useRef(0);
   const messagesRefForDirectUpdate = useRef<Message[]>([]);
+  const placeholderTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   const nextMessageId = () => {
     messageCounterRef.current += 1;
@@ -293,6 +294,27 @@ export default function AgentChat({
     setInputValue('');
     setError(null);
 
+    // SAFETY NET: If placeholder isn't filled in 3 seconds, inject fallback response
+    const timeout = setTimeout(() => {
+      console.warn('[SubmitMessage SAFETY] Placeholder message timeout - checking if filled');
+      setMessages(current => {
+        const placeholder = current.find(m => m.id === placeholderId);
+        if (placeholder && (!placeholder.content || placeholder.content.trim().length === 0)) {
+          console.warn('[SubmitMessage SAFETY] Placeholder still empty after 3s - injecting fallback');
+          const fallbackContent = '[Agent response is being processed. The response may appear on the next page refresh, or contact support if this persists.]';
+          return current.map(m => 
+            m.id === placeholderId 
+              ? { ...m, content: fallbackContent }
+              : m
+          );
+        }
+        return current;
+      });
+      placeholderTimeoutsRef.current.delete(placeholderId);
+    }, 3000);
+
+    placeholderTimeoutsRef.current.set(placeholderId, timeout);
+
     try {
       console.log('[SubmitMessage] Calling onSendMessage', { query: trimmed.slice(0, 50) });
       const response = await onSendMessage(trimmed);
@@ -351,6 +373,14 @@ export default function AgentChat({
 
       // Clear pending response after merging into permanent state
       setPendingResponse(null);
+
+      // Cancel the safety net timeout since response arrived
+      const existingTimeout = placeholderTimeoutsRef.current.get(placeholderId);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+        placeholderTimeoutsRef.current.delete(placeholderId);
+        console.log('[SubmitMessage] Cancelled placeholder safety timeout');
+      }
 
       if (response.status !== 'success') {
         throw new Error(response.error || 'Unknown error');
