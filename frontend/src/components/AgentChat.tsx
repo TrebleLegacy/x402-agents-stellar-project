@@ -156,12 +156,30 @@ export default function AgentChat({
   };
 
   const coerceMessageContent = (value: unknown) => {
-    if (typeof value === 'string') return value;
-    if (value === null || value === undefined) return '';
+    if (typeof value === 'string' && value.trim().length > 0) return value;
+    if (value === null || value === undefined) {
+      console.warn('[coerceMessageContent] Null/undefined value received');
+      return '';
+    }
+    // If it's an empty string, explicitly log it
+    if (typeof value === 'string' && value.trim().length === 0) {
+      console.warn('[coerceMessageContent] Empty string value received');
+      return '';
+    }
     try {
-      return JSON.stringify(value, null, 2);
-    } catch {
-      return String(value);
+      const stringified = JSON.stringify(value, null, 2);
+      if (stringified.trim().length === 0 || stringified === '{}' || stringified === '[]') {
+        console.warn('[coerceMessageContent] JSON stringified to empty/bare object');
+        return '';
+      }
+      return stringified;
+    } catch (e) {
+      console.warn('[coerceMessageContent] JSON stringify failed', e);
+      const fallback = String(value);
+      if (fallback.trim().length === 0) {
+        console.warn('[coerceMessageContent] String() produced empty result');
+      }
+      return fallback;
     }
   };
 
@@ -478,7 +496,11 @@ export default function AgentChat({
                         }`}
                       >
                         <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                          {item.message.content || (item.message.role !== 'user' && <span className="text-slate-500 italic">...</span>)}
+                          {item.message.content ? (
+                            item.message.content
+                          ) : item.message.role !== 'user' ? (
+                            <span className="text-slate-400 italic animate-pulse">⚡ Waiting for response...</span>
+                          ) : null}
                         </p>
 
                         {item.message.role === 'assistant' && (item.message.trace?.length || item.message.agentDebug) ? (

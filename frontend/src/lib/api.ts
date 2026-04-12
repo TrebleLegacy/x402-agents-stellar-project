@@ -141,6 +141,12 @@ export class AgentAPIClient {
       responseIfEmpty: responseText.trim().length === 0 ? 'EMPTY__RESPONSE' : 'HAS__CONTENT',
     });
 
+    // CRITICAL: If response is empty but backend says success, generate fallback response
+    if (responseText.trim().length === 0 && isSuccess) {
+      console.log('[normalizeAgentResponse] FALLBACK: Empty response detected on success status, generating fallback');
+      responseText = `[Agent processed your request successfully but returned no explicit response. Status: ${isSuccess ? 'Success' : 'Error'} | Trace events: ${mergedTrace.length}]`;
+    }
+
     return {
       session_id: data?.session_id || '',
       response: responseText,
