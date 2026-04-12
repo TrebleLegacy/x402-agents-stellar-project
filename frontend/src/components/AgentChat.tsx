@@ -294,7 +294,7 @@ export default function AgentChat({
                             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                             <span className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">{item.log.source}</span>
                             <span className="text-[10px] text-emerald-600">·</span>
-                            <span className="text-[10px] text-emerald-400 font-mono">
+                            <span suppressHydrationWarning className="text-[10px] text-emerald-400 font-mono">
                               {new Date(item.log.at).toLocaleTimeString()}
                             </span>
                           </div>
@@ -325,21 +325,9 @@ export default function AgentChat({
                             : 'bg-slate-800 text-slate-100'
                         }`}
                       >
-                        {item.message.role === 'user' ? (
-                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                            {item.message.content}
-                          </p>
-                        ) : (
-                          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 mt-2 mb-3 shadow-inner">
-                            <h4 className="flex items-center gap-2 text-[11px] font-bold text-emerald-400 mb-2 uppercase tracking-widest">
-                              <Sparkles className="w-3 h-3" />
-                              Final Response
-                            </h4>
-                            <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-slate-200">
-                              {item.message.content || <span className="text-slate-500 italic">No final response generated or returned by API.</span>}
-                            </p>
-                          </div>
-                        )}
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                          {item.message.content || (item.message.role !== 'user' && <span className="text-slate-500 italic">...</span>)}
+                        </p>
 
                         {item.message.role === 'assistant' && (item.message.trace?.length || item.message.agentDebug) ? (
                           <div className="mt-3 pt-3 border-t border-slate-700/70 space-y-2">
@@ -358,7 +346,7 @@ export default function AgentChat({
                                     <span className="font-semibold text-emerald-400">
                                       {event.stage}
                                     </span>
-                                    <span className="text-slate-500">
+                                    <span suppressHydrationWarning className="text-slate-500">
                                       {new Date(event.at).toLocaleTimeString()}
                                     </span>
                                   </div>
@@ -392,7 +380,7 @@ export default function AgentChat({
                     ) : null}
 
                     {item.message.timestamp && (
-                      <p className="text-xs mt-1 opacity-70">
+                      <p suppressHydrationWarning className="text-xs mt-1 opacity-70">
                         {new Date(item.message.timestamp).toLocaleTimeString()}
                       </p>
                     )}
