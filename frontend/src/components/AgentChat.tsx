@@ -63,6 +63,7 @@ export default function AgentChat({
   const [totalCost, setTotalCost] = useState(0);
   const [selectedAgent, setSelectedAgent] = useState<AgentBid | null>(null);
   const [forceUpdateCounter, setForceUpdateCounter] = useState(0);
+  const [pendingResponse, setPendingResponse] = useState<{ id: string; content: string; trace?: any[]; debug?: any } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const autoSentRef = useRef(false);
   const messageCounterRef = useRef(0);
@@ -90,15 +91,37 @@ export default function AgentChat({
     console.log('[timeline] Recalculating timeline', { 
       messageCount: messages.length, 
       forceCounter: forceUpdateCounter,
+      hasPendingResponse: !!pendingResponse,
       firstMsg: messages[0]?.content?.slice(0, 30)
     });
-    const messageItems = messages.map((message, index) => ({
+    
+    let messageItems = messages.map((message, index) => ({
       kind: 'message' as const,
       key: message.id || `msg-${index}-${message.timestamp || 'na'}`,
       at: message.timestamp || new Date(0).toISOString(),
       order: index,
       message,
     }));
+
+    // If there's a pending response, merge it into the last assistant message
+    if (pendingResponse) {
+      messageItems = messageItems.map(item => {
+        if (item.message.id === pendingResponse.id && item.message.role === 'assistant') {
+          console.log('[timeline] Merging pending response into message');
+          return {
+            ...item,
+            message: {
+              ...item.message,
+              content: pendingResponse.content,
+              trace: pendingResponse.trace,
+              agentDebug: pendingResponse.debug,
+            }
+          };
+        }
+        return item;
+      });
+    }
+
     const hasAssistantMessage = messageItems.some(
       item => item.message.role === 'assistant' && item.message.content.trim().length > 0
     );
@@ -120,7 +143,7 @@ export default function AgentChat({
       }
       return timeA - timeB;
     });
-  }, [logEvents, messages, showInlineLogs, forceUpdateCounter]);
+  }, [logEvents, messages, showInlineLogs, forceUpdateCounter, pendingResponse]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -249,6 +272,18 @@ export default function AgentChat({
         contentPreview: assistantContent.slice(0, 100)
       });
 
+      setPendingResponse({
+        id: placeholderId,
+        content: assistantContent,
+        trace: response.trace,
+        debug: response.agentDebug,
+      });
+
+      console.log('[SubmitMessage] Pending response set immediately', {
+        id: placeholderId,
+        contentLength: assistantContent.length
+      });
+
       setMessagesWithRef(prev => {
         const updated = prev.map(msg => {
           if (msg.id === placeholderId) {
@@ -295,6 +330,12 @@ export default function AgentChat({
       console.error('[SubmitMessage] Error occurred', { error: err.message });
       setError(err.message || 'Failed to get response');
       const errorContent = `Error: ${err.message}`;
+      
+      setPendingResponse({
+        id: placeholderId,
+        content: errorContent,
+      });
+
       setMessagesWithRef(prev => 
         prev.map(msg => 
           msg.id === placeholderId
