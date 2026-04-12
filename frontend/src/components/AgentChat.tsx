@@ -64,16 +64,24 @@ export default function AgentChat({
   const [selectedAgent, setSelectedAgent] = useState<AgentBid | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const autoSentRef = useRef(false);
+  const messageCounterRef = useRef(0);
+
+  const nextMessageId = () => {
+    messageCounterRef.current += 1;
+    return `${Date.now()}-${messageCounterRef.current}`;
+  };
 
   const timeline = useMemo(() => {
     const messageItems = messages.map((message, index) => ({
       kind: 'message' as const,
-      key: `msg-${index}-${message.timestamp || 'na'}`,
+      key: message.id || `msg-${index}-${message.timestamp || 'na'}`,
       at: message.timestamp || new Date(0).toISOString(),
       order: index,
       message,
     }));
-    const hasAssistantMessage = messageItems.some(item => item.message.role === 'assistant');
+    const hasAssistantMessage = messageItems.some(
+      item => item.message.role === 'assistant' && item.message.content.trim().length > 0
+    );
     const logItems =
       showInlineLogs !== false && logEvents?.length && hasAssistantMessage
         ? logEvents.map((log, index) => ({
@@ -164,12 +172,16 @@ export default function AgentChat({
     const now = Date.now();
     const userTimestamp = new Date(now).toISOString();
     const placeholderTimestamp = new Date(now + 1).toISOString();
+    const userId = nextMessageId();
+    const placeholderId = nextMessageId();
     const userMessage: Message = {
+      id: userId,
       role: 'user',
       content: trimmed,
       timestamp: userTimestamp,
     };
     const placeholderMessage: Message = {
+      id: placeholderId,
       role: 'assistant',
       content: '',
       timestamp: placeholderTimestamp,
@@ -185,7 +197,7 @@ export default function AgentChat({
 
       const assistantContent = coerceMessageContent(response.response) || response.error || '';
       setMessages(prev => prev.map(msg => (
-        msg.timestamp === placeholderTimestamp
+        msg.id === placeholderId
           ? {
               ...msg,
               content: assistantContent,
@@ -215,7 +227,7 @@ export default function AgentChat({
       setError(err.message || 'Failed to get response');
       const errorContent = `Error: ${err.message}`;
       setMessages(prev => prev.map(msg => (
-        msg.timestamp === placeholderTimestamp
+        msg.id === placeholderId
           ? { ...msg, content: errorContent }
           : msg
       )));
