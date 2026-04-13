@@ -81,6 +81,14 @@ export default function Home() {
   const handleWalletConnected = useCallback(async (publicKey: string) => {
     setConnectedWallet(publicKey);
 
+    // Auto-create agent wallet (sub-account for autonomous payments)
+    if (!agentWallet) {
+      const wallet = generateAgentWallet();
+      setAgentWallet(wallet);
+      // Fund via Friendbot on testnet (non-blocking)
+      fetch(`https://friendbot.stellar.org?addr=${wallet.publicKey}`).catch(() => {});
+    }
+
     // Save to vault
     if (vaultPayload && vaultPassword) {
       const updatedPayload: VaultPayload = {
@@ -92,7 +100,7 @@ export default function Home() {
       };
       await saveVault(updatedPayload);
     }
-  }, [vaultPayload, vaultPassword, saveVault]);
+  }, [vaultPayload, vaultPassword, saveVault, agentWallet]);
 
   const handleWalletDisconnected = useCallback(() => {
     setConnectedWallet(null);
@@ -307,7 +315,6 @@ export default function Home() {
                 walletConnected={!!connectedWallet}
                 loadPresetId={loadPresetId}
                 agentWallet={agentWallet}
-                onAgentWalletCreated={(wallet) => setAgentWallet(wallet)}
                 budgetLimit={budget.dailyLimit}
                 onBudgetChange={(limit) => setBudget(prev => ({
                   ...prev,
