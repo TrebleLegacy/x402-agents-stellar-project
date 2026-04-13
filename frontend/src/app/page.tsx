@@ -365,7 +365,7 @@ export default function Home() {
                   onSendMessage={handleSendMessage}
                   isLoading={isLoading}
                   isPaying={isPaying}
-                  autoMessage={sessionId && autoMessageSessionId !== sessionId ? autoMessage : undefined}
+                  autoMessage={undefined}
                   onAutoMessageSent={() => setAutoMessageSessionId(sessionId)}
                   logEvents={logEvents}
                   showInlineLogs={true}

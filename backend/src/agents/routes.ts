@@ -5,7 +5,7 @@ import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { AgentRepository } from "./repository";
 import { AgentGraph } from "./graph";
 import { AgentState, IntentType, ActionType } from "./types";
-import { requirePayment } from "../api/middlewares/requirePayment";
+
 import { logger } from "../utils/logger";
 
 const router = Router();
@@ -55,7 +55,7 @@ router.post("/session", async (req: Request, res: Response) => {
   }
 });
 
-router.post(["/chat", "/query"], requirePayment as any, async (req: Request, res: Response) => {
+router.post(["/chat", "/query"], async (req: Request, res: Response) => {
   try {
     const message = req.body.message || req.body.query;
     let session_token = req.body.session_token || req.body.session_id;
