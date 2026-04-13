@@ -364,6 +364,8 @@ export default function Home() {
             <ServiceCatalog
               walletConnected={!!connectedWallet}
               onSubscribe={(service: APIService) => {
+                const renewDate = new Date();
+                renewDate.setDate(renewDate.getDate() + 30);
                 const payment: AutoPayment = {
                   id: `sub-${service.id}-${Date.now()}`,
                   service: service.name,
@@ -371,6 +373,7 @@ export default function Home() {
                   status: 'settled',
                   timestamp: new Date().toISOString(),
                   txHash: undefined,
+                  renewsAt: renewDate.toISOString(),
                 };
                 setBudget(prev => ({
                   ...prev,
@@ -433,9 +436,28 @@ export default function Home() {
               totalSpent: parseFloat(p.amount) || 0,
               status: p.status === 'settled' ? 'active' : 'expired',
               lastUsed: p.timestamp,
+              renewsAt: p.renewsAt,
               txHash: p.txHash,
             }))}
-            onToggle={() => {}}
+            onToggle={(id) => {
+              setBudget(prev => ({
+                ...prev,
+                payments: prev.payments.map(p =>
+                  p.id === id ? { ...p, status: p.status === 'settled' ? 'failed' : 'settled' } : p
+                ),
+              }));
+            }}
+            onCancel={(id) => {
+              setBudget(prev => {
+                const payment = prev.payments.find(p => p.id === id);
+                const refund = payment ? parseFloat(payment.amount) || 0 : 0;
+                return {
+                  ...prev,
+                  spent: Math.max(prev.spent - refund, 0),
+                  payments: prev.payments.filter(p => p.id !== id),
+                };
+              });
+            }}
             onRenew={() => {}}
             budgetLimit={budget.dailyLimit}
             budgetSpent={budget.spent}

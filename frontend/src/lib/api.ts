@@ -16,6 +16,7 @@ export interface AutoPayment {
   txHash?: string;
   timestamp: string;
   status: 'settled' | 'failed';
+  renewsAt?: string;
 }
 
 /** Budget state for autonomous payments */
