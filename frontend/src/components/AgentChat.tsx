@@ -62,75 +62,18 @@ export default function AgentChat({
   const [orchestrationStages, setOrchestrationStages] = useState<StageStatus[]>([]);
   const [totalCost, setTotalCost] = useState(0);
   const [selectedAgent, setSelectedAgent] = useState<AgentBid | null>(null);
-  const [forceUpdateCounter, setForceUpdateCounter] = useState(0);
-  const [pendingResponse, setPendingResponse] = useState<{ id: string; content: string; trace?: any[]; debug?: any } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const autoSentRef = useRef(false);
-  const messageCounterRef = useRef(0);
-  const messagesRefForDirectUpdate = useRef<Message[]>([]);
-  const placeholderTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
-  const nextMessageId = () => {
-    messageCounterRef.current += 1;
-    return `msg-${Date.now()}-${messageCounterRef.current}`;
-  };
-
-  const setMessagesWithRef = (updater: Message[] | ((prev: Message[]) => Message[])) => {
-    setMessages(prevMessages => {
-      const newMessages = typeof updater === 'function' ? updater(prevMessages) : updater;
-      messagesRefForDirectUpdate.current = newMessages;
-      
-      // Log all message updates
-      const assistantMessages = newMessages.filter(m => m.role === 'assistant');
-      const lastAssistant = assistantMessages[assistantMessages.length - 1];
-      
-      console.log('[setMessagesWithRef] Messages updated', {
-        totalMessages: newMessages.length,
-        totalAssistantMessages: assistantMessages.length,
-        lastAssistantContent: lastAssistant?.content?.slice(0, 100) || 'EMPTY',
-        lastAssistantId: lastAssistant?.id || 'NO_ID',
-        forceCounter: forceUpdateCounter
-      });
-      return newMessages;
-    });
-    // CRITICAL: Always increment force counter to guarantee re-render
-    setForceUpdateCounter(c => c + 1);
-  };
-
+  // ── Timeline: merge messages + inline log events ──────────────
   const timeline = useMemo(() => {
-    console.log('[timeline] Recalculating timeline', { 
-      messageCount: messages.length, 
-      forceCounter: forceUpdateCounter,
-      hasPendingResponse: !!pendingResponse,
-      firstMsg: messages[0]?.content?.slice(0, 30)
-    });
-    
-    let messageItems = messages.map((message, index) => ({
+    const messageItems = messages.map((message, index) => ({
       kind: 'message' as const,
-      key: message.id || `msg-${index}-${message.timestamp || 'na'}`,
+      key: `msg-${index}-${message.timestamp || 'na'}`,
       at: message.timestamp || new Date(0).toISOString(),
       order: index,
       message,
     }));
-
-    // If there's a pending response, merge it into the last assistant message
-    if (pendingResponse) {
-      messageItems = messageItems.map(item => {
-        if (item.message.id === pendingResponse.id && item.message.role === 'assistant') {
-          console.log('[timeline] Merging pending response into message');
-          return {
-            ...item,
-            message: {
-              ...item.message,
-              content: pendingResponse.content,
-              trace: pendingResponse.trace,
-              agentDebug: pendingResponse.debug,
-            }
-          };
-        }
-        return item;
-      });
-    }
 
     const hasAssistantMessage = messageItems.some(
       item => item.message.role === 'assistant' && item.message.content.trim().length > 0
@@ -145,15 +88,13 @@ export default function AgentChat({
             log,
           }))
         : [];
+
     return [...messageItems, ...logItems].sort((a, b) => {
       const timeA = Date.parse(a.at) || 0;
       const timeB = Date.parse(b.at) || 0;
-      if (timeA === timeB) {
-        return a.order - b.order;
-      }
-      return timeA - timeB;
+      return timeA === timeB ? a.order - b.order : timeA - timeB;
     });
-  }, [logEvents, messages, showInlineLogs, forceUpdateCounter, pendingResponse]);
+  }, [logEvents, messages, showInlineLogs]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -161,93 +102,35 @@ export default function AgentChat({
 
   const formatTimestamp = (iso?: string) => {
     if (!iso) return '';
-    const time = iso.slice(11, 19);
-    return time || iso;
-  };
-
-  const coerceMessageContent = (value: unknown) => {
-    if (typeof value === 'string' && value.trim().length > 0) return value;
-    if (value === null || value === undefined) {
-      console.warn('[coerceMessageContent] Null/undefined value received');
-      return '';
-    }
-    // If it's an empty string, explicitly log it
-    if (typeof value === 'string' && value.trim().length === 0) {
-      console.warn('[coerceMessageContent] Empty string value received');
-      return '';
-    }
-    try {
-      const stringified = JSON.stringify(value, null, 2);
-      if (stringified.trim().length === 0 || stringified === '{}' || stringified === '[]') {
-        console.warn('[coerceMessageContent] JSON stringified to empty/bare object');
-        return '';
-      }
-      return stringified;
-    } catch (e) {
-      console.warn('[coerceMessageContent] JSON stringify failed', e);
-      const fallback = String(value);
-      if (fallback.trim().length === 0) {
-        console.warn('[coerceMessageContent] String() produced empty result');
-      }
-      return fallback;
-    }
+    return iso.slice(11, 19) || iso;
   };
 
   useEffect(() => {
-    console.log('[useEffect messages changed] Current messages:', {
-      count: messages.length,
-      lastMessage: messages[messages.length - 1]?.content?.slice(0, 50),
-      hasAssistant: messages.some(m => m.role === 'assistant'),
-    });
     scrollToBottom();
   }, [messages, logEvents]);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [forceUpdateCounter]);
-
-  useEffect(() => {
-    if (pendingResponse) {
-      console.log('[useEffect pendingResponse] Pending response state changed', {
-        id: pendingResponse.id,
-        contentLength: pendingResponse.content.length,
-        hasTrace: !!pendingResponse.trace?.length,
-      });
-      // Ensure the pending response is merged into timeline immediately
-      console.log('[useEffect pendingResponse] Current messages snapshot:', {
-        totalMessages: messages.length,
-        messageIds: messages.map(m => m.id).slice(-3), // Last 3
-      });
-      
-      // Force a re-render by incrementing counter
-      requestAnimationFrame(() => {
-        console.log('[uEffect pendingResponse] Triggering force-update via requestAnimationFrame');
-        setForceUpdateCounter(c => c + 1);
-      });
-    }
-  }, [pendingResponse, messages.length]);
-
+  // ── Mock bid / orchestration generators ───────────────────────
   const generateMockBids = (): AgentBid[] => {
     const baseAgents = [
-      { name: 'DeFiAnalyzer', icon: '📊', caps: ['defi-metrics', 'protocol-analysis'] },
-      { name: 'SecurityAuditor', icon: '🛡️', caps: ['security-analysis', 'vulnerability-scan'] },
-      { name: 'NewsAggregator', icon: '📰', caps: ['news-retrieval', 'sentiment-analysis'] },
-      { name: 'DataOracle', icon: '🔮', caps: ['price-feeds', 'on-chain-data'] },
-      { name: 'ComplianceMonitor', icon: '✓', caps: ['compliance-check', 'policy-enforcement'] },
+      { name: 'DeFiAnalyzer', caps: ['defi-metrics', 'protocol-analysis'] },
+      { name: 'SecurityAuditor', caps: ['security-analysis', 'vulnerability-scan'] },
+      { name: 'NewsAggregator', caps: ['news-retrieval', 'sentiment-analysis'] },
+      { name: 'DataOracle', caps: ['price-feeds', 'on-chain-data'] },
+      { name: 'ComplianceMonitor', caps: ['compliance-check', 'policy-enforcement'] },
     ];
 
     return baseAgents.map((agent, idx) => ({
       id: `agent-${idx}`,
       name: agent.name,
       capabilities: agent.caps,
-      trustScore: Math.floor(Math.random() * 40) + 60, // 60-100
-      successRate: Math.random() * 0.4 + 0.6, // 60-100%
-      totalInteractions: Math.floor(Math.random() * 150) + 50, // 50-200
+      trustScore: Math.floor(Math.random() * 40) + 60,
+      successRate: Math.random() * 0.4 + 0.6,
+      totalInteractions: Math.floor(Math.random() * 150) + 50,
       basePrice: 0.05,
-      finalPrice: 0.05 * (Math.random() * 0.6 + 0.8), // 0.04-0.08
-      reputationMultiplier: Math.random() * 0.4 + 0.8, // 0.8-1.2
-      demandMultiplier: Math.random() * 0.3 + 1.0, // 1.0-1.3
-      selectedForBid: idx === 0, // First one selected
+      finalPrice: 0.05 * (Math.random() * 0.6 + 0.8),
+      reputationMultiplier: Math.random() * 0.4 + 0.8,
+      demandMultiplier: Math.random() * 0.3 + 1.0,
+      selectedForBid: idx === 0,
     }));
   };
 
@@ -266,171 +149,57 @@ export default function AgentChat({
     { stage: 12, name: 'Trace Recording', status: 'completed', detail: 'Complete audit trail saved', duration: 156, cost: 0 },
   ];
 
+  // ── Submit: simple, clean, working ────────────────────────────
   const submitMessage = async (content: string) => {
     const trimmed = content.trim();
     if (!trimmed) return;
 
-    const now = Date.now();
-    const userTimestamp = new Date(now).toISOString();
-    const placeholderTimestamp = new Date(now + 1).toISOString();
-    const userId = nextMessageId();
-    const placeholderId = nextMessageId();
-    
-    console.log('[SubmitMessage] Creating user and placeholder messages', { userId, placeholderId });
-    
     const userMessage: Message = {
-      id: userId,
       role: 'user',
       content: trimmed,
-      timestamp: userTimestamp,
-    };
-    const placeholderMessage: Message = {
-      id: placeholderId,
-      role: 'assistant',
-      content: '',
-      timestamp: placeholderTimestamp,
+      timestamp: new Date().toISOString(),
     };
 
-    setMessagesWithRef(prev => {
-      const newMessages = [...prev, userMessage, placeholderMessage];
-      console.log('[SubmitMessage] Messages state updated with placeholder', { 
-        newMessagesCount: newMessages.length,
-        lastMessage: newMessages[newMessages.length - 1]
-      });
-      return newMessages;
-    });
-    
+    setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setError(null);
 
-    // SAFETY NET: If placeholder isn't filled in 3 seconds, inject fallback response
-    const timeout = setTimeout(() => {
-      console.warn('[SubmitMessage SAFETY] Placeholder message timeout - checking if filled');
-      setMessages(current => {
-        const placeholder = current.find(m => m.id === placeholderId);
-        if (placeholder && (!placeholder.content || placeholder.content.trim().length === 0)) {
-          console.warn('[SubmitMessage SAFETY] Placeholder still empty after 3s - injecting fallback');
-          const fallbackContent = '[Agent response is being processed. The response may appear on the next page refresh, or contact support if this persists.]';
-          return current.map(m => 
-            m.id === placeholderId 
-              ? { ...m, content: fallbackContent }
-              : m
-          );
-        }
-        return current;
-      });
-      placeholderTimeoutsRef.current.delete(placeholderId);
-    }, 3000);
-
-    placeholderTimeoutsRef.current.set(placeholderId, timeout);
-
     try {
-      console.log('[SubmitMessage] Calling onSendMessage', { query: trimmed.slice(0, 50) });
       const response = await onSendMessage(trimmed);
-      
-      console.log('[SubmitMessage] Response received', { 
-        responseText: response.response?.slice(0, 100) || 'EMPTY',
-        hasTrace: !!response.trace?.length,
-        hasDebug: !!response.agentDebug,
-        status: response.status
-      });
 
-      const assistantContent = coerceMessageContent(response.response) || response.error || '(Empty response from agent)';
-      
-      console.log('[SubmitMessage] Coerced assistant content', { 
-        contentLength: assistantContent.length,
-        contentPreview: assistantContent.slice(0, 100)
-      });
+      const assistantContent =
+        response.response || response.error || '(Empty response from agent)';
 
-      setPendingResponse({
-        id: placeholderId,
+      const assistantMessage: Message = {
+        role: 'assistant',
         content: assistantContent,
+        timestamp: new Date().toISOString(),
         trace: response.trace,
-        debug: response.agentDebug,
-      });
+        agentDebug: response.agentDebug,
+      };
 
-      console.log('[SubmitMessage] Pending response set immediately', {
-        id: placeholderId,
-        contentLength: assistantContent.length
-      });
-
-      setMessagesWithRef(prev => {
-        const updated = prev.map(msg => {
-          if (msg.id === placeholderId) {
-            console.log('[SubmitMessage] UPDATING PLACEHOLDER MESSAGE', { 
-              oldContent: msg.content,
-              newContent: assistantContent.slice(0, 100),
-              willHaveTrace: !!response.trace?.length
-            });
-            return {
-              ...msg,
-              content: assistantContent,
-              trace: response.trace,
-              agentDebug: response.agentDebug,
-            };
-          }
-          return msg;
-        });
-        console.log('[SubmitMessage] Messages updated with response', {
-          totalMessages: updated.length,
-          assistantMessages: updated.filter(m => m.role === 'assistant').length,
-          placeholderFound: updated.some(m => m.id === placeholderId),
-          updatedMessageContent: updated.find(m => m.id === placeholderId)?.content?.slice?.(0, 50)
-        });
-        return updated;
-      });
-
-      // Clear pending response after merging into permanent state
-      setPendingResponse(null);
-
-      // Cancel the safety net timeout since response arrived
-      const existingTimeout = placeholderTimeoutsRef.current.get(placeholderId);
-      if (existingTimeout) {
-        clearTimeout(existingTimeout);
-        placeholderTimeoutsRef.current.delete(placeholderId);
-        console.log('[SubmitMessage] Cancelled placeholder safety timeout');
-      }
+      setMessages(prev => [...prev, assistantMessage]);
 
       if (response.status !== 'success') {
         throw new Error(response.error || 'Unknown error');
       }
 
-      // Trigger orchestration flow visually
+      // Trigger orchestration visuals
       const bids = generateMockBids();
       setAgentBids(bids);
-
-      const stages = generateOrchestrationStages();
-      setOrchestrationStages(stages);
-
-      const selected = bids.find(b => b.selectedForBid);
-      setSelectedAgent(selected || bids[0]);
-
-      const cost = stages.reduce((sum, s) => sum + (s.cost || 0), 0);
-      setTotalCost(cost);
+      setOrchestrationStages(generateOrchestrationStages());
+      setSelectedAgent(bids.find(b => b.selectedForBid) || bids[0]);
+      setTotalCost(generateOrchestrationStages().reduce((s, st) => s + (st.cost || 0), 0));
     } catch (err: any) {
-      console.error('[SubmitMessage] Error occurred', { error: err.message });
       setError(err.message || 'Failed to get response');
-      const errorContent = `Error: ${err.message}`;
-      
-      // Show error in pending response immediately
-      setPendingResponse({
-        id: placeholderId,
-        content: errorContent,
-      });
-
-      // Also persist to messages for consistency
-      setMessagesWithRef(prev => 
-        prev.map(msg => 
-          msg.id === placeholderId
-            ? { ...msg, content: errorContent }
-            : msg
-        )
-      );
-
-      // Clear pending response after a delay to let messages take over
-      setTimeout(() => {
-        setPendingResponse(null);
-      }, 100);
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `Error: ${err.message}`,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
     }
   };
 
@@ -439,6 +208,7 @@ export default function AgentChat({
     await submitMessage(inputValue);
   };
 
+  // ── Auto-message on first session ─────────────────────────────
   useEffect(() => {
     if (
       autoSentRef.current ||
@@ -455,15 +225,7 @@ export default function AgentChat({
     submitMessage(autoMessage);
   }, [autoMessage, isLoading, isPaying, messages.length, onAutoMessageSent, sessionId]);
 
-  // Cleanup function to clear any pending timeouts on unmount
-  useEffect(() => {
-    return () => {
-      console.log('[AgentChat unmount] Clearing placeholder timeouts');
-      placeholderTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
-      placeholderTimeoutsRef.current.clear();
-    };
-  }, []);
-
+  // ── Render ────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full bg-slate-950">
       <div className="flex flex-col gap-1 px-6 py-4 border-b border-slate-800 bg-slate-900/50">
@@ -485,7 +247,7 @@ export default function AgentChat({
         {/* Agent Templates Selector */}
         {messages.length === 0 && (
           <div className="mb-6">
-            <AgentTemplates 
+            <AgentTemplates
               onSelectTemplate={setSelectedTemplate}
               selectedId={selectedTemplate?.id}
             />
@@ -503,14 +265,14 @@ export default function AgentChat({
           </div>
         ) : (
           <>
-            {/* Show bidding after message sent */}
+            {/* Bidding display */}
             {agentBids.length > 0 && messages.length > 0 && (
               <div className="mb-4">
                 <AgentBiddingDisplay
                   agents={agentBids}
                   title="Agent Bidding Round"
                   onSelectAgent={(agent) => {
-                    setAgentBids(prev => 
+                    setAgentBids(prev =>
                       prev.map(a => ({ ...a, selectedForBid: a.id === agent.id }))
                     );
                     setSelectedAgent(agent);
@@ -519,7 +281,7 @@ export default function AgentChat({
               </div>
             )}
 
-            {/* Show orchestration flow */}
+            {/* Orchestration flow */}
             {orchestrationStages.length > 0 && messages.length > 0 && (
               <div className="mb-4">
                 <OrchestrationFlow
@@ -575,11 +337,7 @@ export default function AgentChat({
                         }`}
                       >
                         <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                          {item.message.content ? (
-                            item.message.content
-                          ) : item.message.role !== 'user' ? (
-                            <span className="text-slate-400 italic animate-pulse">⚡ Waiting for response...</span>
-                          ) : null}
+                          {item.message.content}
                         </p>
 
                         {item.message.role === 'assistant' && (item.message.trace?.length || item.message.agentDebug) ? (

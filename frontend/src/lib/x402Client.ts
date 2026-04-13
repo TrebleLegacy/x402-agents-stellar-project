@@ -25,7 +25,7 @@ export class X402PaymentClient {
     this.network = network;
   }
 
-  private getNetworkPassphrase(): string {
+  getNetworkPassphrase(): string {
     return this.network === 'testnet'
       ? StellarSdk.Networks.TESTNET
       : StellarSdk.Networks.PUBLIC;

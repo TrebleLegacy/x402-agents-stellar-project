@@ -8,48 +8,45 @@ import {
   InteractionLogEvent,
 } from '@/types/agent';
 
+/**
+ * Signing function type — allows pluggable signers (Freighter, raw keypair, etc.)
+ * Takes unsigned XDR + network passphrase, returns signed XDR.
+ */
+export type TransactionSigner = (xdr: string, networkPassphrase: string) => Promise<string>;
+
 export class AgentAPIClient {
   private client: AxiosInstance;
   private paymentClient: X402PaymentClient;
-  private userKeypair: { publicKey: string; secret: string } | null = null;
+  private publicKey: string | null = null;
+  private signer: TransactionSigner | null = null;
   private onLog?: (event: InteractionLogEvent) => void;
 
   constructor(baseURL: string, network: 'testnet' | 'mainnet' = 'testnet') {
     this.client = axios.create({
       baseURL,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
     });
-    
-    // Add global response logging interceptor
-    this.client.interceptors.response.use(
-      response => {
-        console.log('[axios-interceptor] Response received:', {
-          status: response.status,
-          url: response.config.url,
-          dataKeys: Object.keys(response.data || {}),
-          hasMessage: !!response.data?.message,
-          hasResponse: !!response.data?.response,
-          dataPreview: JSON.stringify(response.data).slice(0, 200),
-        });
-        return response;
-      },
-      error => {
-        console.log('[axios-interceptor] Error response:', {
-          status: error.response?.status,
-          url: error.config?.url,
-          errorMessage: error.message,
-        });
-        return Promise.reject(error);
-      }
-    );
-    
     this.paymentClient = new X402PaymentClient(network);
   }
 
+  /** Set the connected wallet's public key (from Freighter) */
+  setPublicKey(publicKey: string): void {
+    this.publicKey = publicKey;
+  }
+
+  /** Set the transaction signer (Freighter's signTransaction wrapper) */
+  setSigner(signer: TransactionSigner): void {
+    this.signer = signer;
+  }
+
+  /** @deprecated Use setPublicKey + setSigner instead */
   setKeypair(publicKey: string, secret: string): void {
-    this.userKeypair = { publicKey, secret };
+    this.publicKey = publicKey;
+    // Create a local signer from the raw secret key for backwards compat
+    this.signer = async (xdr: string) => {
+      const signatureData = this.paymentClient.signTransaction(xdr, secret);
+      return signatureData.transaction;
+    };
   }
 
   setLogger(callback?: (event: InteractionLogEvent) => void): void {
@@ -57,35 +54,43 @@ export class AgentAPIClient {
   }
 
   private emitLog(event: InteractionLogEvent): void {
-    if (this.onLog) {
-      this.onLog(event);
-    }
+    this.onLog?.(event);
   }
 
+  // ── Payment signing (supports Freighter or raw keypair) ───────
   private async buildAndSignPayment(
     destination: string,
     amount: string,
     price: string
   ): Promise<string> {
-    if (!this.userKeypair) {
-      throw new Error('Keypair not set. Call setKeypair first.');
+    if (!this.publicKey || !this.signer) {
+      throw new Error('Wallet not connected. Call setPublicKey + setSigner first.');
     }
 
-    const signatureData = this.paymentClient.buildAndSign(
-      {
-        sourcePublicKey: this.userKeypair.publicKey,
-        receiveSigningPublicKey: destination,
-        destinationAddress: destination,
-        amount,
-        assetContract: '',
-        price,
-      },
-      this.userKeypair.secret
-    );
+    // Build unsigned transaction
+    const unsignedXdr = this.paymentClient.buildUnsignedTransaction({
+      sourcePublicKey: this.publicKey,
+      receiveSigningPublicKey: destination,
+      destinationAddress: destination,
+      amount,
+      assetContract: '',
+      price,
+    });
+
+    // Sign via the pluggable signer (Freighter popup, or raw keypair)
+    const signedXdr = await this.signer(unsignedXdr, this.paymentClient.getNetworkPassphrase());
+
+    const signatureData: PaymentSignatureData = {
+      transaction: signedXdr,
+      signed: true,
+      publicKey: this.publicKey,
+      timestamp: Date.now(),
+    };
 
     return this.paymentClient.createPaymentSignatureHeader(signatureData);
   }
 
+  // ── Response normalization ────────────────────────────────────
   private normalizeAgentResponse(
     data: any,
     options?: {
@@ -93,17 +98,6 @@ export class AgentAPIClient {
       paymentResponse?: Record<string, unknown>;
     }
   ): AgentQueryResponse {
-    console.log('[normalizeAgentResponse] Input data structure:', {
-      dataIsNull: data === null,
-      dataIsUndefined: data === undefined,
-      hasResponse: !!data?.response,
-      hasMessage: !!data?.message,
-      responseType: typeof data?.response,
-      responseKeys: data?.response ? Object.keys(data.response) : [],
-      dataKeys: Object.keys(data || {}),
-      fullData: JSON.stringify(data).slice(0, 300),
-    });
-
     const isSuccess = data?.status === 'success' || data?.success === true;
     const backendTrace = Array.isArray(data?.trace)
       ? (data.trace as AgentTraceEvent[])
@@ -111,40 +105,22 @@ export class AgentAPIClient {
     const mergedTrace = [...(options?.trace || []), ...backendTrace];
     const responseValue = data?.response;
     let responseText = '';
-    
+
     if (typeof responseValue === 'string') {
-      console.log('[normalizeAgentResponse] Response is string');
       responseText = responseValue;
     } else if (responseValue?.message) {
-      console.log('[normalizeAgentResponse] Response has .message property', { 
-        messageLength: responseValue.message.length,
-        messagePreview: responseValue.message.slice(0, 100)
-      });
       responseText = responseValue.message;
     } else if (data?.message) {
-      console.log('[normalizeAgentResponse] Using data.message fallback', {
-        messageLength: data.message.length
-      });
       responseText = data.message;
     } else if (data?.response) {
-      console.log('[normalizeAgentResponse] JSON stringifying response');
       responseText = JSON.stringify(data.response);
     } else {
-      console.log('[normalizeAgentResponse] NO RESPONSE FOUND - using fallback');
       responseText = '(No response returned from the backend)';
     }
 
-    console.log('[normalizeAgentResponse] Final response text:', {
-      length: responseText.length,
-      preview: responseText.slice(0, 100),
-      isEmpty: responseText.trim().length === 0,
-      responseIfEmpty: responseText.trim().length === 0 ? 'EMPTY__RESPONSE' : 'HAS__CONTENT',
-    });
-
-    // CRITICAL: If response is empty but backend says success, generate fallback response
+    // Fallback for empty success responses
     if (responseText.trim().length === 0 && isSuccess) {
-      console.log('[normalizeAgentResponse] FALLBACK: Empty response detected on success status, generating fallback');
-      responseText = `[Agent processed your request successfully but returned no explicit response. Status: ${isSuccess ? 'Success' : 'Error'} | Trace events: ${mergedTrace.length}]`;
+      responseText = `[Agent processed your request but returned no response. Trace events: ${mergedTrace.length}]`;
     }
 
     return {
@@ -160,26 +136,49 @@ export class AgentAPIClient {
   }
 
   private parsePriceToAmount(price: unknown): string {
-    if (typeof price === 'number') {
-      return String(price);
-    }
-
+    if (typeof price === 'number') return String(price);
     if (typeof price === 'string') {
       const trimmed = price.trim();
-      if (/^\$\d+(\.\d+)?$/.test(trimmed)) {
-        return trimmed.slice(1);
-      }
-      return trimmed;
+      return /^\$\d+(\.\d+)?$/.test(trimmed) ? trimmed.slice(1) : trimmed;
     }
-
     if (price && typeof price === 'object' && 'amount' in (price as any)) {
       const amount = (price as any).amount;
       return typeof amount === 'string' ? amount : String(amount);
     }
-
     return '0.001';
   }
 
+  // ── Emit backend trace/network events to the log ──────────────
+  private emitBackendEvents(data: any): void {
+    if (data.networkEvents && Array.isArray(data.networkEvents)) {
+      data.networkEvents.forEach((ev: any) => this.emitLog(ev));
+    }
+    if (data.trace && Array.isArray(data.trace)) {
+      data.trace.forEach((event: any) => {
+        const source = ['agent', 'specialist', 'forge', 'sdk', 'network'].includes(event?.source)
+          ? event.source
+          : 'agent';
+        this.emitLog({
+          at: event?.at || new Date().toISOString(),
+          source,
+          stage: event?.stage || 'trace',
+          detail: event?.detail || 'Trace event',
+          payload: event?.payload,
+        });
+      });
+    }
+    if (data.debug) {
+      this.emitLog({
+        at: new Date().toISOString(),
+        source: 'agent',
+        stage: 'agent_debug',
+        detail: 'Agent reasoning snapshot',
+        payload: data.debug,
+      });
+    }
+  }
+
+  // ── Main query endpoint ───────────────────────────────────────
   async queryAgent(
     query: string,
     sessionId?: string,
@@ -208,15 +207,6 @@ export class AgentAPIClient {
         '/api/agent/query',
         { query, session_id: sessionId, agent_config: agentConfig }
       );
-      
-      console.log('[queryAgent] Raw response received:', {
-        status: response.status,
-        dataKeys: Object.keys(response.data || {}),
-        hasMessage: !!response.data?.message,
-        hasResponse: !!response.data?.response,
-        messageValue: response.data?.message?.slice?.(0, 100),
-        responseValue: response.data?.response,
-      });
 
       trace.push({
         at: new Date().toISOString(),
@@ -229,43 +219,10 @@ export class AgentAPIClient {
         stage: 'request_succeeded',
         detail: 'Agent query succeeded without payment',
       });
-      
-      if (response.data.networkEvents && Array.isArray(response.data.networkEvents)) {
-        response.data.networkEvents.forEach((ev: any) => this.emitLog(ev));
-      }
-      if (response.data.trace && Array.isArray(response.data.trace)) {
-        response.data.trace.forEach((event: any) => {
-          const source = ['agent', 'specialist', 'forge', 'sdk', 'network'].includes(event?.source)
-            ? event.source
-            : 'agent';
-          this.emitLog({
-            at: event?.at || new Date().toISOString(),
-            source,
-            stage: event?.stage || 'trace',
-            detail: event?.detail || 'Trace event',
-            payload: event?.payload,
-          });
-        });
-      }
-      if (response.data.debug) {
-        this.emitLog({
-          at: new Date().toISOString(),
-          source: 'agent',
-          stage: 'agent_debug',
-          detail: 'Agent reasoning snapshot',
-          payload: response.data.debug,
-        });
-      }
-      
-      const normalized = this.normalizeAgentResponse(response.data, { trace });
-      console.log('[queryAgent] Normalized response:', {
-        responseLength: normalized.response.length,
-        status: normalized.status,
-        hasError: !!normalized.error,
-        responsePreview: normalized.response.slice(0, 100),
-      });
-      return normalized;
-  
+
+      this.emitBackendEvents(response.data);
+      return this.normalizeAgentResponse(response.data, { trace });
+
     } catch (error: any) {
       if (error.response?.status === 402) {
         const instructions = (error.response.data?.instructions ||
@@ -292,41 +249,17 @@ export class AgentAPIClient {
             stage: 'request_failed',
             detail: 'Paywall did not provide destination address',
           });
-          this.emitLog({
-            at: new Date().toISOString(),
-            source: 'agent',
-            stage: 'request_failed',
-            detail: 'Paywall missing destination',
-          });
-          throw new Error(
-            'Payment required but no destination was provided by server.'
-          );
+          throw new Error('Payment required but no destination was provided by server.');
         }
 
         const amount = this.parsePriceToAmount(instructions?.price);
 
-        trace.push({
-          at: new Date().toISOString(),
-          stage: 'payment_signing_started',
-          detail: 'Building and signing Stellar payment transaction',
-          payload: {
-            destination: payTo,
-            amount,
-            network: instructions?.network,
-            scheme: instructions?.scheme,
-          },
-        });
         this.emitLog({
           at: new Date().toISOString(),
           source: 'agent',
           stage: 'payment_signing_started',
           detail: 'Signing payment for paywall',
-          payload: {
-            destination: payTo,
-            amount,
-            network: instructions?.network,
-            scheme: instructions?.scheme,
-          },
+          payload: { destination: payTo, amount },
         });
 
         const paymentHeader = await this.buildAndSignPayment(
@@ -335,30 +268,11 @@ export class AgentAPIClient {
           typeof instructions?.price === 'string' ? instructions.price : amount
         );
 
-        trace.push({
-          at: new Date().toISOString(),
-          stage: 'payment_signing_completed',
-          detail: 'Payment transaction signed and encoded in Payment-Signature header',
-          payload: { headerLength: paymentHeader.length },
-        });
         this.emitLog({
           at: new Date().toISOString(),
           source: 'agent',
           stage: 'payment_signing_completed',
           detail: 'Payment signature created',
-          payload: { headerLength: paymentHeader.length },
-        });
-
-        trace.push({
-          at: new Date().toISOString(),
-          stage: 'payment_retry_submitted',
-          detail: 'Retrying agent query with payment headers',
-        });
-        this.emitLog({
-          at: new Date().toISOString(),
-          source: 'agent',
-          stage: 'payment_retry_submitted',
-          detail: 'Retrying agent query with payment',
         });
 
         try {
@@ -368,15 +282,9 @@ export class AgentAPIClient {
             {
               headers: {
                 'Payment-Signature': paymentHeader,
-                ...(instructions?.network
-                  ? { 'X-402-Network': instructions.network }
-                  : {}),
-                ...(instructions?.scheme
-                  ? { 'X-402-Scheme': instructions.scheme }
-                  : {}),
-                ...(instructions?.facilitatorUrl
-                  ? { 'X-402-Facilitator': instructions.facilitatorUrl }
-                  : {}),
+                ...(instructions?.network ? { 'X-402-Network': instructions.network } : {}),
+                ...(instructions?.scheme ? { 'X-402-Scheme': instructions.scheme } : {}),
+                ...(instructions?.facilitatorUrl ? { 'X-402-Facilitator': instructions.facilitatorUrl } : {}),
               },
             }
           );
@@ -389,7 +297,7 @@ export class AgentAPIClient {
           trace.push({
             at: new Date().toISOString(),
             stage: 'payment_retry_succeeded',
-            detail: 'Paywall payment accepted and protected agent response returned',
+            detail: 'Paywall payment accepted',
             payload: paymentResponse,
           });
           this.emitLog({
@@ -400,56 +308,13 @@ export class AgentAPIClient {
             payload: paymentResponse,
           });
 
-          
-          if (retryResponse.data.networkEvents && Array.isArray(retryResponse.data.networkEvents)) {
-            retryResponse.data.networkEvents.forEach((ev: any) => this.emitLog(ev));
-          }
-          if (retryResponse.data.trace && Array.isArray(retryResponse.data.trace)) {
-            retryResponse.data.trace.forEach((event: any) => {
-              const source = ['agent', 'specialist', 'forge', 'sdk', 'network'].includes(event?.source)
-                ? event.source
-                : 'agent';
-              this.emitLog({
-                at: event?.at || new Date().toISOString(),
-                source,
-                stage: event?.stage || 'trace',
-                detail: event?.detail || 'Trace event',
-                payload: event?.payload,
-              });
-            });
-          }
-          if (retryResponse.data.debug) {
-            this.emitLog({
-              at: new Date().toISOString(),
-              source: 'agent',
-              stage: 'agent_debug',
-              detail: 'Agent reasoning snapshot',
-              payload: retryResponse.data.debug,
-            });
-          }
-          const normalizedRetry = this.normalizeAgentResponse(retryResponse.data, {
-            trace,
-            paymentResponse,
-          });
-          console.log('[queryAgent] Normalized RETRY response (after payment):', {
-            responseLength: normalizedRetry.response.length,
-            status: normalizedRetry.status,
-            hasError: !!normalizedRetry.error,
-            responsePreview: normalizedRetry.response.slice(0, 100),
-          });
-          return normalizedRetry;
+          this.emitBackendEvents(retryResponse.data);
+          return this.normalizeAgentResponse(retryResponse.data, { trace, paymentResponse });
         } catch (retryError: any) {
           trace.push({
             at: new Date().toISOString(),
             stage: 'payment_retry_failed',
             detail: 'Retry with payment failed',
-            payload: retryError?.response?.data || retryError?.message,
-          });
-          this.emitLog({
-            at: new Date().toISOString(),
-            source: 'agent',
-            stage: 'payment_retry_failed',
-            detail: 'Payment retry failed',
             payload: retryError?.response?.data || retryError?.message,
           });
           throw retryError;
@@ -459,7 +324,7 @@ export class AgentAPIClient {
       trace.push({
         at: new Date().toISOString(),
         stage: 'request_failed',
-        detail: 'Initial request failed before paywall handling',
+        detail: 'Initial request failed',
         payload: error?.response?.data || error?.message,
       });
       this.emitLog({
@@ -502,8 +367,7 @@ export class AgentAPIClient {
   }
 
   /**
-   * Call the advanced orchestrator endpoint with full LLM reasoning
-   * Returns streaming reasoning steps for each stage
+   * Advanced orchestrator with SSE streaming
    */
   async executeAdvancedOrchestrator(
     task: string,
@@ -522,20 +386,13 @@ export class AgentAPIClient {
     try {
       const response = await this.client.post(
         '/api/orchestrator/execute',
-        {
-          task,
-          agentName,
-          budget,
-          destinationAddress,
-        },
-        {
-          responseType: 'stream',
-        }
+        { task, agentName, budget, destinationAddress },
+        { responseType: 'stream' }
       );
 
       return new Promise((resolve, reject) => {
         let buffer = '';
-        let stages: any[] = [];
+        const stages: any[] = [];
 
         response.data.on('data', (chunk: Buffer) => {
           buffer += chunk.toString();
@@ -549,19 +406,14 @@ export class AgentAPIClient {
                 const data = JSON.parse(line.slice(6));
                 onStage?.(data);
                 stages.push(data);
-
                 this.emitLog({
                   at: new Date().toISOString(),
                   source: 'orchestrator',
                   stage: data.stage || `stage-${data.step}`,
                   detail: data.reasoning || data.decision,
-                  payload: {
-                    step: data.step,
-                    cost: data.cost,
-                    txHash: data.txHash,
-                  },
+                  payload: { step: data.step, cost: data.cost, txHash: data.txHash },
                 });
-              } catch (e) {
+              } catch {
                 // Continue on parse error
               }
             }
@@ -569,13 +421,8 @@ export class AgentAPIClient {
         });
 
         response.data.on('end', () => {
-          resolve({
-            status: 'success',
-            stages,
-            response: 'Orchestration complete',
-          });
+          resolve({ status: 'success', stages, response: 'Orchestration complete' });
         });
-
         response.data.on('error', reject);
       });
     } catch (error: any) {
@@ -590,8 +437,7 @@ export class AgentAPIClient {
   }
 
   /**
-   * Call the enhanced Forge Oracle endpoint
-   * Uses LLM-driven agent selection and real x402 payments
+   * Forge Oracle with LLM-driven agent selection
    */
   async forgeOracleWithReasoning(
     task: string,
@@ -609,19 +455,13 @@ export class AgentAPIClient {
     try {
       const response = await this.client.post(
         '/api/forge/v2/oracle',
-        {
-          task,
-          context,
-          budget,
-        },
-        {
-          responseType: 'stream',
-        }
+        { task, context, budget },
+        { responseType: 'stream' }
       );
 
       return new Promise((resolve, reject) => {
         let buffer = '';
-        let stages: any[] = [];
+        const stages: any[] = [];
 
         response.data.on('data', (chunk: Buffer) => {
           buffer += chunk.toString();
@@ -635,32 +475,22 @@ export class AgentAPIClient {
                 const data = JSON.parse(line.slice(6));
                 onStage?.(data);
                 stages.push(data);
-
-                if (data.stage === 'agent-selection') {
+                if (data.stage === 'agent-selection' || data.stage === 'agent-execution') {
                   this.emitLog({
                     at: new Date().toISOString(),
                     source: 'forge-oracle',
-                    stage: 'agent-selection',
-                    detail: data.reasoning || 'Selecting agent',
+                    stage: data.stage,
+                    detail: data.reasoning || `Processing ${data.stage}`,
                     payload: {
                       selectedAgent: data.selectedAgent,
                       confidence: data.confidence,
-                    },
-                  });
-                } else if (data.stage === 'agent-execution') {
-                  this.emitLog({
-                    at: new Date().toISOString(),
-                    source: 'forge-oracle',
-                    stage: 'agent-execution',
-                    detail: data.reasoning || 'Executing agent',
-                    payload: {
                       agent: data.agentName,
                       paymentTxHash: data.paymentTxHash,
                       cost: data.cost,
                     },
                   });
                 }
-              } catch (e) {
+              } catch {
                 // Continue on parse error
               }
             }
@@ -668,13 +498,8 @@ export class AgentAPIClient {
         });
 
         response.data.on('end', () => {
-          resolve({
-            status: 'success',
-            stages,
-            response: 'Forge Oracle complete',
-          });
+          resolve({ status: 'success', stages, response: 'Forge Oracle complete' });
         });
-
         response.data.on('error', reject);
       });
     } catch (error: any) {

@@ -3,20 +3,19 @@
 import React, { useEffect, useState } from 'react';
 import { Settings } from 'lucide-react';
 import { AgentConfig as AgentConfigType } from '@/types/agent';
-import WalletManager from './WalletManager';
 import { AGENT_PRESETS } from '@/data/agentPresets';
 
 interface AgentConfigProps {
-  onConfigSubmit: (config: AgentConfigType, keypair: { publicKey: string; secret: string }) => void;
+  onConfigSubmit: (config: AgentConfigType) => void;
   isLoading: boolean;
-  onKeypairChange?: (keypair: { publicKey: string; secret: string }) => void;
+  walletConnected: boolean;
   loadPresetId?: string | null;
 }
 
 export default function AgentConfigForm({
   onConfigSubmit,
   isLoading,
-  onKeypairChange,
+  walletConnected,
   loadPresetId,
 }: AgentConfigProps) {
   const [config, setConfig] = useState<AgentConfigType>({
@@ -28,21 +27,8 @@ export default function AgentConfigForm({
     maxTokens: 2000,
   });
 
-  const [keypair, setKeypair] = useState({
-    publicKey: '',
-    secret: '',
-  });
-
   const handleConfigChange = (field: keyof AgentConfigType, value: any) => {
     setConfig(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleKeypairSelected = (selectedKeypair: {
-    publicKey: string;
-    secret: string;
-  }) => {
-    setKeypair(selectedKeypair);
-    onKeypairChange?.(selectedKeypair);
   };
 
   const handleLoadPremade = (presetId: string) => {
@@ -70,11 +56,7 @@ export default function AgentConfigForm({
       alert('Agent name is required');
       return;
     }
-    if (!keypair.publicKey || !keypair.secret) {
-      alert('Please provide both public key and secret key');
-      return;
-    }
-    onConfigSubmit(config, keypair);
+    onConfigSubmit(config);
   };
 
   return (
@@ -180,22 +162,15 @@ export default function AgentConfigForm({
           />
         </div>
 
-        <div className="border-t border-slate-800 pt-6">
-          <WalletManager
-            onKeypairSelected={handleKeypairSelected}
-            isConfigured={!!keypair.publicKey}
-            selectedKeypair={keypair}
-          />
-        </div>
+        {!walletConnected && (
+          <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-300 text-center">
+            Connect your Freighter wallet in the sidebar to launch an agent
+          </div>
+        )}
 
         <button
           type="submit"
-          disabled={
-            isLoading ||
-            !config.name.trim() ||
-            !keypair.publicKey ||
-            !keypair.secret
-          }
+          disabled={isLoading || !config.name.trim() || !walletConnected}
           className="w-full mt-6 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
         >
           {isLoading ? 'Launching...' : 'Launch Agent'}
