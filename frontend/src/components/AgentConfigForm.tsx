@@ -27,22 +27,17 @@ export default function AgentConfigForm({
     maxTokens: 2000,
   });
 
-  const handleConfigChange = (field: keyof AgentConfigType, value: any) => {
-    setConfig(prev => ({ ...prev, [field]: value }));
-  };
-
   const handleLoadPremade = (presetId: string) => {
     const preset = AGENT_PRESETS.find((agent) => agent.id === presetId);
     if (!preset) return;
-    setConfig(prev => ({
-      ...prev,
+    setConfig({
       name: preset.name,
       description: preset.description,
       systemPrompt: preset.systemPrompt,
       temperature: preset.temperature,
       maxTokens: preset.maxTokens,
-      model: preset.model || prev.model,
-    }));
+      model: preset.model || 'gpt-4o',
+    });
   };
 
   useEffect(() => {
@@ -66,7 +61,7 @@ export default function AgentConfigForm({
           <Settings className="w-5 h-5 text-emerald-400" />
           <h2 className="text-lg font-semibold text-white">Configure Agent</h2>
         </div>
-        <p className="text-sm text-slate-400">Create and launch a new agent</p>
+        <p className="text-sm text-slate-400">Select a template above, then launch</p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex-1 p-6 space-y-6">
@@ -77,94 +72,25 @@ export default function AgentConfigForm({
           <input
             type="text"
             value={config.name}
-            onChange={e => handleConfigChange('name', e.target.value)}
-            placeholder="e.g., DeFi Analyzer"
+            onChange={e => setConfig(prev => ({ ...prev, name: e.target.value }))}
+            placeholder="Select a template or type a name"
             className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none transition-colors"
           />
         </div>
 
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-200">
-            Description
-          </label>
-          <textarea
-            value={config.description}
-            onChange={e => handleConfigChange('description', e.target.value)}
-            placeholder="What does this agent do?"
-            rows={2}
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none transition-colors resize-none"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-200">
-            System Prompt
-          </label>
-          <textarea
-            value={config.systemPrompt || ''}
-            onChange={e => handleConfigChange('systemPrompt', e.target.value)}
-            placeholder="Define the agent's behavior and capabilities..."
-            rows={4}
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none transition-colors resize-none font-mono text-sm"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-200">
-              Model
-            </label>
-            <select
-              value={config.model}
-              onChange={e =>
-                handleConfigChange('model', e.target.value as any)
-              }
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-emerald-500 focus:outline-none transition-colors"
-            >
-              <option value="gpt-4o">GPT-4o</option>
-              <option value="gpt-4-turbo">GPT-4 Turbo</option>
-              <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-            </select>
+        {config.name && (
+          <div className="bg-slate-900/60 border border-slate-800 rounded-lg p-3 space-y-1">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide">Ready to launch</p>
+            <p className="text-sm text-white font-medium">{config.name}</p>
+            {config.description && (
+              <p className="text-xs text-slate-400 mt-1">{config.description}</p>
+            )}
           </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-200">
-              Temperature
-            </label>
-            <input
-              type="number"
-              min="0"
-              max="1"
-              step="0.1"
-              value={config.temperature}
-              onChange={e =>
-                handleConfigChange('temperature', parseFloat(e.target.value))
-              }
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-emerald-500 focus:outline-none transition-colors"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-200">
-            Max Tokens
-          </label>
-          <input
-            type="number"
-            min="100"
-            max="4000"
-            step="100"
-            value={config.maxTokens}
-            onChange={e =>
-              handleConfigChange('maxTokens', parseInt(e.target.value))
-            }
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-emerald-500 focus:outline-none transition-colors"
-          />
-        </div>
+        )}
 
         {!walletConnected && (
           <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-300 text-center">
-            Connect your Freighter wallet in the sidebar to launch an agent
+            Connect your Freighter wallet to launch an agent
           </div>
         )}
 

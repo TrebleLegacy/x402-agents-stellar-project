@@ -122,20 +122,8 @@ export default function WalletSidebar({
         </div>
       )}
 
-      {/* Monthly Spend */}
-      {isConnected && (
-        <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-4 mb-4">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-xs text-slate-500 uppercase tracking-wider">
-              Session Spend
-            </p>
-            <span className="text-xs text-slate-600">{activeServices} services</span>
-          </div>
-          <span className="text-lg font-semibold text-white">
-            {monthlySpend.toFixed(4)} XLM
-          </span>
-        </div>
-      )}
+
+
 
       {/* Spacer */}
       <div className="flex-1" />

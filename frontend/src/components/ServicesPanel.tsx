@@ -77,7 +77,7 @@ export default function ServicesPanel({
   onBudgetChange,
   onFundAgent,
 }: ServicesPanelProps) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+
 
   // Real balance from Horizon, default to 0 when not yet fetched
   const cardBalance = onChainBalance ?? 0;
@@ -213,13 +213,12 @@ export default function ServicesPanel({
         {active.length > 0 && (
           <div className="bg-slate-900/60 rounded-xl border border-slate-800/80 overflow-hidden divide-y divide-slate-800/50 mb-3">
             {active.map((sub) => {
-              const isExpanded = expandedId === sub.id;
+
               return (
                 <div key={sub.id}>
                   {/* Row */}
                   <div
-                    className="flex items-center gap-3 px-4 py-3.5 hover:bg-slate-800/30 transition-colors cursor-pointer"
-                    onClick={() => setExpandedId(isExpanded ? null : sub.id)}
+                    className="flex items-center gap-3 px-4 py-3.5"
                   >
                     <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-lg shrink-0 border border-slate-700/50">
                       {SERVICE_ICONS[sub.service] || '⚡'}
@@ -238,62 +237,56 @@ export default function ServicesPanel({
                     </div>
                   </div>
 
-                  {/* Expanded detail (Apple-style) */}
-                  {isExpanded && (
-                    <div className="px-4 pb-4 pt-1 bg-slate-900/40 space-y-3">
-                      {/* Renewal info */}
-                      {sub.renewsAt && (
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-500">Auto-renews</span>
-                          <span className="text-slate-300">
-                            {new Date(sub.renewsAt).toLocaleDateString('en-US', {
-                              month: 'long',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Plan */}
+                  {/* Detail (always visible) */}
+                  <div className="px-4 pb-4 pt-1 bg-slate-900/40 space-y-3">
+                    {/* Renewal info */}
+                    {sub.renewsAt && (
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-500">Plan</span>
-                        <span className="text-slate-300">{sub.price} / {sub.plan === 'monthly' ? 'month' : 'query'}</span>
+                        <span className="text-slate-500">Auto-renews</span>
+                        <span className="text-slate-300">
+                          {new Date(sub.renewsAt).toLocaleDateString('en-US', {
+                            month: 'long',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </span>
                       </div>
+                    )}
 
-                      {/* Total spent */}
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-500">Total spent</span>
-                        <span className="text-slate-300">{sub.totalSpent.toFixed(3)} XLM</span>
-                      </div>
-
-                      {/* Explorer link */}
-                      {sub.txHash && (
-                        <a
-                          href={getExplorerUrl(sub.txHash)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 text-xs text-emerald-500 hover:text-emerald-400 transition-colors"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          View on Stellar Explorer
-                        </a>
-                      )}
-
-                      {/* Cancel button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onCancel?.(sub.id);
-                          setExpandedId(null);
-                        }}
-                        className="w-full mt-1 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1.5"
-                      >
-                        <X className="w-3 h-3" />
-                        Cancel Subscription
-                      </button>
+                    {/* Plan */}
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500">Plan</span>
+                      <span className="text-slate-300">{sub.price} / {sub.plan === 'monthly' ? 'month' : 'query'}</span>
                     </div>
-                  )}
+
+                    {/* Total spent */}
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500">Total spent</span>
+                      <span className="text-slate-300">{sub.totalSpent.toFixed(3)} XLM</span>
+                    </div>
+
+                    {/* Explorer link */}
+                    {sub.txHash && (
+                      <a
+                        href={getExplorerUrl(sub.txHash)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-xs text-emerald-500 hover:text-emerald-400 transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        View on Stellar Explorer
+                      </a>
+                    )}
+
+                    {/* Cancel button */}
+                    <button
+                      onClick={() => onCancel?.(sub.id)}
+                      className="w-full mt-1 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <X className="w-3 h-3" />
+                      Cancel Subscription
+                    </button>
+                  </div>
                 </div>
               );
             })}
