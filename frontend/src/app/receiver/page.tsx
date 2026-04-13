@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Radio, ArrowDownLeft, ExternalLink, CreditCard, Zap } from 'lucide-react';
+import { Radio, ArrowDownLeft, ExternalLink, CreditCard } from 'lucide-react';
+import SdkDocs from '@/components/SdkDocs';
 
 interface Payment {
   id: string;
@@ -46,7 +47,6 @@ export default function ReceiverPage() {
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        // Only show payment operations (not create_account, etc.)
         if (data.type !== 'payment') return;
 
         const payment: Payment = {
@@ -65,7 +65,6 @@ export default function ReceiverPage() {
 
     es.onerror = () => {
       setConnected(false);
-      // EventSource auto-reconnects
     };
 
     return () => {
@@ -103,21 +102,16 @@ export default function ReceiverPage() {
       <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-8">
         {/* Address & Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          {/* Listening Address */}
           <div className="md:col-span-1 bg-slate-900/60 border border-slate-800 rounded-xl p-4">
             <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Listening Address</p>
             <p className="text-xs text-slate-300 font-mono break-all leading-relaxed">
               {receiverAddress || '—'}
             </p>
           </div>
-
-          {/* Payment Count */}
           <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col items-center justify-center">
             <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Payments Received</p>
             <p className="text-3xl font-bold text-white tabular-nums">{payments.length}</p>
           </div>
-
-          {/* Total XLM */}
           <div className="bg-slate-900/60 border border-emerald-500/20 rounded-xl p-4 flex flex-col items-center justify-center">
             <p className="text-[10px] text-emerald-400/70 uppercase tracking-wider mb-1">Total Earned</p>
             <p className="text-3xl font-bold text-emerald-400 tabular-nums">
@@ -138,7 +132,7 @@ export default function ReceiverPage() {
           <h2 className="text-[11px] text-slate-500 uppercase tracking-wider font-medium mb-4">Live Payment Feed</h2>
 
           {payments.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+            <div className="flex flex-col items-center justify-center py-16 text-slate-500">
               <Radio className="w-10 h-10 mb-4 opacity-30 animate-pulse" />
               <p className="text-sm">Waiting for payments…</p>
               <p className="text-xs text-slate-600 mt-1">Send a transaction from the AgentPay dashboard to see it here</p>
@@ -150,12 +144,9 @@ export default function ReceiverPage() {
                   key={p.id}
                   className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex items-center gap-4 animate-in fade-in slide-in-from-top-2 duration-300"
                 >
-                  {/* Icon */}
                   <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
                     <ArrowDownLeft className="w-5 h-5 text-emerald-400" />
                   </div>
-
-                  {/* Details */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2">
                       <p className="text-sm font-semibold text-white">
@@ -167,8 +158,6 @@ export default function ReceiverPage() {
                       from {p.from}
                     </p>
                   </div>
-
-                  {/* Time + Link */}
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     <span className="text-[10px] text-slate-500">
                       {new Date(p.timestamp).toLocaleTimeString()}
@@ -186,6 +175,15 @@ export default function ReceiverPage() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Divider */}
+        <div className="my-10 border-t border-slate-800" />
+
+        {/* SDK Documentation */}
+        <div>
+          <h2 className="text-[11px] text-slate-500 uppercase tracking-wider font-medium mb-4">How x402 Works</h2>
+          <SdkDocs />
         </div>
       </main>
     </div>
