@@ -1,4 +1,5 @@
 import * as StellarSdk from '@stellar/stellar-sdk';
+import { Buffer } from 'buffer';
 
 export interface X402PaymentInput {
   sourcePublicKey: string;
@@ -24,11 +25,16 @@ export interface AgentWallet {
 }
 
 /**
- * Generate a fresh Stellar keypair for the agent wallet.
- * The keypair is ephemeral — store it in the Vault for persistence.
+ * Deterministically derive an agent wallet from the main wallet public key.
+ * Uses SHA-256(domain_separator + pubkey) as the ed25519 seed.
+ * Same main wallet → same agent wallet, on any device/browser.
  */
-export function generateAgentWallet(): AgentWallet {
-  const kp = StellarSdk.Keypair.random();
+export async function deriveAgentWallet(mainWalletPublicKey: string): Promise<AgentWallet> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(`x402-agentpay-v1:${mainWalletPublicKey}`);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const seed = new Uint8Array(hashBuffer); // 32 bytes
+  const kp = StellarSdk.Keypair.fromRawEd25519Seed(Buffer.from(seed));
   return { publicKey: kp.publicKey(), secretKey: kp.secret() };
 }
 

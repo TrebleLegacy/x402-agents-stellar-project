@@ -18,7 +18,7 @@ import { AgentAPIClient, BudgetState, AutoPayment } from '@/lib/api';
 import { InteractionLogEvent } from '@/types/agent';
 import { VaultManager, VaultPayload } from '@/lib/vault';
 import { freighterSigner } from '@/lib/freighter';
-import { generateAgentWallet, agentWalletSigner, AgentWallet } from '@/lib/x402Client';
+import { deriveAgentWallet, agentWalletSigner, AgentWallet } from '@/lib/x402Client';
 import LandingPage from '@/components/LandingPage';
 
 export default function Home() {
@@ -87,11 +87,16 @@ export default function Home() {
   const handleWalletConnected = useCallback(async (publicKey: string) => {
     setConnectedWallet(publicKey);
 
-    // Auto-create agent wallet keypair (NOT funded yet — funded on first launch)
-    if (!agentWallet) {
-      const wallet = generateAgentWallet();
-      setAgentWallet(wallet);
-    }
+    // Deterministically derive agent wallet from main wallet pubkey
+    // Same input → same output, on any device/browser
+    const wallet = await deriveAgentWallet(publicKey);
+    setAgentWallet(wallet);
+
+    // Check if already funded on-chain
+    try {
+      const res = await fetch(`https://horizon-testnet.stellar.org/accounts/${wallet.publicKey}`);
+      if (res.ok) setAgentFunded(true);
+    } catch { /* noop */ }
 
     // Save to vault
     if (vaultPayload && vaultPassword) {
@@ -104,7 +109,7 @@ export default function Home() {
       };
       await saveVault(updatedPayload);
     }
-  }, [vaultPayload, vaultPassword, saveVault, agentWallet]);
+  }, [vaultPayload, vaultPassword, saveVault]);
 
   const handleWalletDisconnected = useCallback(() => {
     setConnectedWallet(null);

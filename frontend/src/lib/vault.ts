@@ -17,6 +17,8 @@ export interface VaultPayload {
   agentPreferences: Record<string, any>;
   /** Session ID history by wallet pubkey */
   sessionHistory: Record<string, string>;
+  /** Agent wallet keypairs per main wallet (persisted across sessions) */
+  agentWallets?: Record<string, { publicKey: string; secretKey: string }>;
 }
 
 export class VaultManager {
@@ -125,6 +127,7 @@ export class VaultManager {
       activeWallet: null,
       agentPreferences: {},
       sessionHistory: {},
+      agentWallets: {},
     };
   }
 }
