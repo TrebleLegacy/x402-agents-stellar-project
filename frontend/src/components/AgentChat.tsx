@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, AlertCircle, Zap, Sparkles } from 'lucide-react';
+import { Send, AlertCircle, Zap, Sparkles, Terminal } from 'lucide-react';
 import { Message, AgentQueryResponse, InteractionLogEvent } from '@/types/agent';
 import { renderRichAgentCard } from './AgentCards';
 import AgentTemplates, { AgentTemplate } from './AgentTemplates';
@@ -62,6 +62,7 @@ export default function AgentChat({
   const [orchestrationStages, setOrchestrationStages] = useState<StageStatus[]>([]);
   const [totalCost, setTotalCost] = useState(0);
   const [selectedAgent, setSelectedAgent] = useState<AgentBid | null>(null);
+  const [devMode, setDevMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const autoSentRef = useRef(false);
 
@@ -234,12 +235,25 @@ export default function AgentChat({
             <h2 className="text-lg font-semibold text-white">{agentName}</h2>
             <p className="text-xs text-slate-400">Session: {sessionId.slice(0, 12)}...</p>
           </div>
-          {isPaying && (
-            <div className="flex items-center gap-2 px-3 py-1 bg-amber-900/30 rounded-full border border-amber-700/50">
-              <Zap className="w-3 h-3 text-amber-400 animate-pulse" />
-              <span className="text-xs text-amber-300 font-medium">Processing Payment</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {isPaying && (
+              <div className="flex items-center gap-2 px-3 py-1 bg-amber-900/30 rounded-full border border-amber-700/50">
+                <Zap className="w-3 h-3 text-amber-400 animate-pulse" />
+                <span className="text-xs text-amber-300 font-medium">Processing Payment</span>
+              </div>
+            )}
+            <button
+              onClick={() => setDevMode(prev => !prev)}
+              className={`p-1.5 rounded-md transition-colors ${
+                devMode
+                  ? 'bg-emerald-800/60 text-emerald-300 border border-emerald-600/50'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+              }`}
+              title={devMode ? 'Hide dev logs' : 'Show dev logs'}
+            >
+              <Terminal className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -265,8 +279,8 @@ export default function AgentChat({
           </div>
         ) : (
           <>
-            {/* Bidding display */}
-            {agentBids.length > 0 && messages.length > 0 && (
+            {/* Bidding display (dev mode only) */}
+            {devMode && agentBids.length > 0 && messages.length > 0 && (
               <div className="mb-4">
                 <AgentBiddingDisplay
                   agents={agentBids}
@@ -281,8 +295,8 @@ export default function AgentChat({
               </div>
             )}
 
-            {/* Orchestration flow */}
-            {orchestrationStages.length > 0 && messages.length > 0 && (
+            {/* Orchestration flow (dev mode only) */}
+            {devMode && orchestrationStages.length > 0 && messages.length > 0 && (
               <div className="mb-4">
                 <OrchestrationFlow
                   stages={orchestrationStages}
@@ -298,32 +312,34 @@ export default function AgentChat({
               <div className="space-y-3">
                 {timeline.map((item) =>
                   item.kind === 'log' ? (
-                    <div key={item.key} className="pl-2 border-l-2 border-emerald-500/50">
-                      <div className="px-3 py-2 rounded-lg bg-emerald-950/40 border border-emerald-900/60 text-xs space-y-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                            <span className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">{item.log.source}</span>
-                            <span className="text-[10px] text-emerald-600">·</span>
-                            <span className="text-[10px] text-emerald-400 font-mono">
-                              {formatTimestamp(item.log.at)}
-                            </span>
+                    devMode ? (
+                      <div key={item.key} className="pl-2 border-l-2 border-emerald-500/50">
+                        <div className="px-3 py-2 rounded-lg bg-emerald-950/40 border border-emerald-900/60 text-xs space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                              <span className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">{item.log.source}</span>
+                              <span className="text-[10px] text-emerald-600">·</span>
+                              <span className="text-[10px] text-emerald-400 font-mono">
+                                {formatTimestamp(item.log.at)}
+                              </span>
+                            </div>
                           </div>
+                          <div className="pl-4">
+                            <div className="text-emerald-100 font-semibold text-xs">{item.log.stage}</div>
+                            <div className="text-emerald-300/80 text-xs leading-relaxed">{item.log.detail}</div>
+                          </div>
+                          {item.log.payload !== undefined && (
+                            <details className="pl-4 mt-1">
+                              <summary className="text-[10px] text-emerald-500/70 cursor-pointer hover:text-emerald-400 font-medium">→ payload details</summary>
+                              <pre className="text-[9px] text-emerald-300/60 whitespace-pre-wrap break-words bg-slate-950/80 p-2 rounded border border-emerald-900/30 overflow-x-auto mt-1 font-mono">
+                                {JSON.stringify(item.log.payload, null, 2)}
+                              </pre>
+                            </details>
+                          )}
                         </div>
-                        <div className="pl-4">
-                          <div className="text-emerald-100 font-semibold text-xs">{item.log.stage}</div>
-                          <div className="text-emerald-300/80 text-xs leading-relaxed">{item.log.detail}</div>
-                        </div>
-                        {item.log.payload !== undefined && (
-                          <details className="pl-4 mt-1">
-                            <summary className="text-[10px] text-emerald-500/70 cursor-pointer hover:text-emerald-400 font-medium">→ payload details</summary>
-                            <pre className="text-[9px] text-emerald-300/60 whitespace-pre-wrap break-words bg-slate-950/80 p-2 rounded border border-emerald-900/30 overflow-x-auto mt-1 font-mono">
-                              {JSON.stringify(item.log.payload, null, 2)}
-                            </pre>
-                          </details>
-                        )}
                       </div>
-                    </div>
+                    ) : null
                   ) : (
                     <div
                       key={item.key}
@@ -340,7 +356,7 @@ export default function AgentChat({
                           {item.message.content}
                         </p>
 
-                        {item.message.role === 'assistant' && (item.message.trace?.length || item.message.agentDebug) ? (
+                        {devMode && item.message.role === 'assistant' && (item.message.trace?.length || item.message.agentDebug) ? (
                           <div className="mt-3 pt-3 border-t border-slate-700/70 space-y-2">
                             {item.message.trace?.length ? (
                               <details className="bg-slate-900/60 rounded border border-slate-700">
