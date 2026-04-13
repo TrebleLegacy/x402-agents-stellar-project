@@ -450,6 +450,8 @@ export default function Home() {
                 }))}
                 onToggle={() => {}}
                 onRenew={() => {}}
+                budgetLimit={budget.dailyLimit}
+                budgetSpent={budget.spent}
               />
             ) : (
               <div className="p-4">
