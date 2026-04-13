@@ -363,16 +363,59 @@ export default function Home() {
           {!agentConfig ? (
             <ServiceCatalog
               walletConnected={!!connectedWallet}
-              onSubscribe={(service: APIService) => {
+              subscribedServiceIds={new Set(
+                budget.payments
+                  .filter(p => p.status === 'settled')
+                  .map(p => {
+                    const match = p.id.match(/^sub-(.+?)-\d+$/);
+                    return match ? match[1] : '';
+                  })
+                  .filter(Boolean)
+              )}
+              onSubscribe={async (service: APIService) => {
                 const renewDate = new Date();
                 renewDate.setDate(renewDate.getDate() + 30);
+                const paymentId = `sub-${service.id}-${Date.now()}`;
+                let txHash: string | undefined;
+
+                // Real on-chain payment via agent wallet
+                if (agentWallet) {
+                  try {
+                    const { X402PaymentClient } = await import('@/lib/x402Client');
+                    const client = new X402PaymentClient('testnet');
+                    const serverAddr = process.env.NEXT_PUBLIC_SERVER_STELLAR_ADDRESS
+                      || 'GCBGKJHXWPHFRDHM32ZBGV74YQ75BXLKHCS7NBO2PYMPKYJE32U7ILAS';
+                    const signed = await client.buildAndSign({
+                      sourcePublicKey: agentWallet.publicKey,
+                      receiveSigningPublicKey: serverAddr,
+                      destinationAddress: serverAddr,
+                      amount: String(service.priceXLM),
+                      assetContract: '',
+                      price: service.price,
+                    }, agentWallet.secretKey);
+
+                    // Submit to Horizon
+                    const res = await fetch('https://horizon-testnet.stellar.org/transactions', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                      body: `tx=${encodeURIComponent(signed.transaction)}`,
+                    });
+                    if (res.ok) {
+                      const result = await res.json();
+                      txHash = result.hash;
+                    }
+                  } catch (err) {
+                    console.warn('On-chain subscription payment failed (non-blocking):', err);
+                  }
+                }
+
                 const payment: AutoPayment = {
-                  id: `sub-${service.id}-${Date.now()}`,
+                  id: paymentId,
                   service: service.name,
                   amount: String(service.priceXLM),
                   status: 'settled',
                   timestamp: new Date().toISOString(),
-                  txHash: undefined,
+                  txHash,
                   renewsAt: renewDate.toISOString(),
                 };
                 setBudget(prev => ({

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Zap, MessageSquare, Globe, Shield, BarChart3, Newspaper, ChevronRight, Sparkles } from 'lucide-react';
+import { Zap, Globe, Shield, BarChart3, Newspaper, Loader2 } from 'lucide-react';
 
 export interface APIService {
   id: string;
@@ -89,21 +89,28 @@ const AGENT_TEMPLATES = [
 ];
 
 interface ServiceCatalogProps {
-  onSubscribe: (service: APIService) => void;
+  onSubscribe: (service: APIService) => Promise<void>;
   onLaunchAgent: (presetId: string) => void;
   walletConnected: boolean;
+  /** Service IDs that are currently subscribed (source of truth from parent) */
+  subscribedServiceIds: Set<string>;
 }
 
 export default function ServiceCatalog({
   onSubscribe,
   onLaunchAgent,
   walletConnected,
+  subscribedServiceIds,
 }: ServiceCatalogProps) {
-  const [subscribedIds, setSubscribedIds] = useState<Set<string>>(new Set());
+  const [subscribingId, setSubscribingId] = useState<string | null>(null);
 
-  const handleSubscribe = (service: APIService) => {
-    setSubscribedIds(prev => new Set(prev).add(service.id));
-    onSubscribe(service);
+  const handleSubscribe = async (service: APIService) => {
+    setSubscribingId(service.id);
+    try {
+      await onSubscribe(service);
+    } finally {
+      setSubscribingId(null);
+    }
   };
 
   return (
@@ -144,7 +151,8 @@ export default function ServiceCatalog({
           <h2 className="text-[11px] text-slate-500 uppercase tracking-wider font-medium mb-3">Paid API Services</h2>
           <div className="space-y-3">
             {API_SERVICES.map((service) => {
-              const isSubscribed = subscribedIds.has(service.id);
+              const isSubscribed = subscribedServiceIds.has(service.id);
+              const isLoading = subscribingId === service.id;
               return (
                 <div
                   key={service.id}
@@ -156,12 +164,10 @@ export default function ServiceCatalog({
                 >
                   <div className="p-4">
                     <div className="flex items-start gap-3">
-                      {/* Icon */}
                       <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center shrink-0 border border-slate-700/50">
                         {service.icon}
                       </div>
 
-                      {/* Content */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <h3 className="text-sm font-medium text-white">{service.name}</h3>
@@ -169,7 +175,6 @@ export default function ServiceCatalog({
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">{service.description}</p>
 
-                        {/* Features */}
                         <div className="flex flex-wrap gap-1.5 mt-2">
                           {service.features.map((f) => (
                             <span key={f} className="text-[10px] px-2 py-0.5 bg-slate-800/80 text-slate-400 rounded-full">
@@ -180,7 +185,6 @@ export default function ServiceCatalog({
                       </div>
                     </div>
 
-                    {/* Subscribe button */}
                     <div className="mt-3 flex items-center justify-between">
                       <span className="text-[10px] text-slate-600">{service.billing} · {service.endpoint}</span>
                       {isSubscribed ? (
@@ -191,11 +195,20 @@ export default function ServiceCatalog({
                       ) : (
                         <button
                           onClick={() => handleSubscribe(service)}
-                          disabled={!walletConnected}
+                          disabled={!walletConnected || isLoading}
                           className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-400 text-xs font-medium rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
                         >
-                          <Zap className="w-3 h-3" />
-                          Add to AgentPay
+                          {isLoading ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Signing...
+                            </>
+                          ) : (
+                            <>
+                              <Zap className="w-3 h-3" />
+                              Add to AgentPay
+                            </>
+                          )}
                         </button>
                       )}
                     </div>
@@ -206,7 +219,6 @@ export default function ServiceCatalog({
           </div>
         </div>
 
-        {/* Hint */}
         {!walletConnected && (
           <div className="px-6 pb-6">
             <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl text-center">
