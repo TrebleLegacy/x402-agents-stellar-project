@@ -61,12 +61,12 @@ export default function Home() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const apiClientRef = useRef<AgentAPIClient | null>(null);
 
-  // ── On mount: check vault ─────────────────────────────────────
-  useEffect(() => {
-    if (started && VaultManager.hasVault() && !vaultPayload) {
-      setVaultOpen(true);
-    }
-  }, [started, vaultPayload]);
+  // ── On mount: vault disabled for hackathon demo ──────────────
+  // useEffect(() => {
+  //   if (started && VaultManager.hasVault() && !vaultPayload) {
+  //     setVaultOpen(true);
+  //   }
+  // }, [started, vaultPayload]);
 
   // ── Vault unlock handler ──────────────────────────────────────
   const handleVaultUnlocked = useCallback((password: string, payload: VaultPayload) => {
@@ -406,19 +406,7 @@ export default function Home() {
   // ── Main layout ───────────────────────────────────────────────
   return (
     <div className="h-screen flex flex-col bg-slate-950 overflow-hidden text-slate-100 font-sans">
-      {/* Vault Modal */}
-      <VaultModal
-        isOpen={vaultOpen}
-        onClose={() => {
-          if (!vaultPayload) {
-            // First time — create vault on close
-            setVaultOpen(false);
-          } else {
-            setVaultOpen(false);
-          }
-        }}
-        onUnlocked={handleVaultUnlocked}
-      />
+      {/* Vault Modal — disabled for hackathon demo */}
 
 
       {/* MAIN DASHBOARD */}

@@ -98,9 +98,6 @@ export default function AgentConfigForm({
           })}
         </div>
 
-        {/* Spacer */}
-        <div className="flex-1" />
-
         {/* Wallet gate */}
         {!walletConnected && (
           <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-300 text-center">

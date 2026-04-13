@@ -65,7 +65,7 @@ export default function WalletSidebar({
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
           <Zap className="w-5 h-5 text-emerald-400" />
-          <h1 className="text-xl font-bold text-white">FORGE</h1>
+          <h1 className="text-xl font-bold text-white">AgentPay</h1>
         </div>
         <button
           onClick={onLockApp}

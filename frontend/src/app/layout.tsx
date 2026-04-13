@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'FORGE v2',
+  title: 'AgentPay — x402 Agent Payments',
   description: 'Trust-aware, competitive runtime for economically intelligent agents on Stellar',
 };
 

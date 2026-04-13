@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Send, AlertCircle, Zap, Sparkles, Terminal } from 'lucide-react';
 import { Message, AgentQueryResponse, InteractionLogEvent } from '@/types/agent';
 import { renderRichAgentCard } from './AgentCards';
-import AgentTemplates, { AgentTemplate } from './AgentTemplates';
+
 import AgentBiddingDisplay from './AgentBiddingDisplay';
 import OrchestrationFlow from './OrchestrationFlow';
 
@@ -57,7 +57,7 @@ export default function AgentChat({
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
+
   const [agentBids, setAgentBids] = useState<AgentBid[]>([]);
   const [orchestrationStages, setOrchestrationStages] = useState<StageStatus[]>([]);
   const [totalCost, setTotalCost] = useState(0);
@@ -258,23 +258,13 @@ export default function AgentChat({
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-4 flex flex-col">
-        {/* Agent Templates Selector */}
-        {messages.length === 0 && (
-          <div className="mb-6">
-            <AgentTemplates
-              onSelectTemplate={setSelectedTemplate}
-              selectedId={selectedTemplate?.id}
-            />
-          </div>
-        )}
-
         {/* Messages Timeline */}
         {timeline.length === 0 ? (
           <div className="flex items-center justify-center h-full flex-col gap-4 text-slate-400">
             <Sparkles className="w-8 h-8 opacity-50" />
             <div className="text-center">
-              <p className="text-sm">Select an agent template above to begin</p>
-              <p className="text-xs text-slate-500 mt-2">Then type a message to trigger the full orchestration flow</p>
+              <p className="text-sm">Ask me anything — I'll use paid x402 APIs to answer.</p>
+              <p className="text-xs text-slate-500 mt-2">Each query is paid autonomously by your agent wallet</p>
             </div>
           </div>
         ) : (
