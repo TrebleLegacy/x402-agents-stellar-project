@@ -135,13 +135,13 @@ export default function ServicesPanel({
             <div>
               <p className="text-[9px] text-slate-400 uppercase tracking-wider">Balance</p>
               <p className="text-xl font-bold text-white tabular-nums">
-                {cardBalance.toFixed(2)} <span className="text-sm text-slate-400 font-normal">XLM</span>
+                {cardBalance.toFixed(2)} <span className="text-sm text-slate-400 font-normal">USDC</span>
               </p>
             </div>
             <div className="text-right">
               <p className="text-[9px] text-slate-400 uppercase tracking-wider">Est. Monthly</p>
               <p className="text-sm text-slate-300 tabular-nums">
-                {monthlyEstimate > 0 ? `${monthlyEstimate.toFixed(3)} XLM` : '—'}
+                {monthlyEstimate > 0 ? `${monthlyEstimate.toFixed(3)} USDC` : '—'}
               </p>
             </div>
           </div>
@@ -175,7 +175,7 @@ export default function ServicesPanel({
                 value={budgetLimit}
                 onChange={(e) => onBudgetChange?.(parseFloat(e.target.value) || 10)}
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white text-sm focus:border-emerald-500 focus:outline-none transition-colors"
-                placeholder="Amount (XLM)"
+                placeholder="Amount (USDC)"
               />
             </div>
             <button
@@ -262,7 +262,7 @@ export default function ServicesPanel({
                     {/* Total spent */}
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-500">Total spent</span>
-                      <span className="text-slate-300">{sub.totalSpent.toFixed(3)} XLM</span>
+                      <span className="text-slate-300">{sub.totalSpent.toFixed(3)} USDC</span>
                     </div>
 
                     {/* Explorer link */}

@@ -53,7 +53,7 @@ export default function ReceiverPage() {
           id: data.id,
           from: data.from,
           amount: data.amount,
-          asset: data.asset_type === 'native' ? 'XLM' : data.asset_code || data.asset_type,
+          asset: data.asset_type === 'native' ? 'USDC*' : data.asset_code || data.asset_type,
           timestamp: data.created_at,
           txHash: data.transaction_hash,
         };
@@ -115,7 +115,7 @@ export default function ReceiverPage() {
           <div className="bg-slate-900/60 border border-emerald-500/20 rounded-xl p-4 flex flex-col items-center justify-center">
             <p className="text-[10px] text-emerald-400/70 uppercase tracking-wider mb-1">Total Earned</p>
             <p className="text-3xl font-bold text-emerald-400 tabular-nums">
-              {totalXLM.toFixed(4)} <span className="text-lg font-normal text-emerald-500">XLM</span>
+              {totalXLM.toFixed(4)} <span className="text-lg font-normal text-emerald-500">USDC</span>
             </p>
           </div>
         </div>
@@ -185,6 +185,11 @@ export default function ReceiverPage() {
           <h2 className="text-[11px] text-slate-500 uppercase tracking-wider font-medium mb-4">How x402 Works</h2>
           <SdkDocs />
         </div>
+
+        {/* Testnet disclaimer */}
+        <p className="text-[11px] text-slate-600 mt-8 text-center">
+          * Demo runs on Stellar Testnet using XLM as a stand-in for USDC. Production uses native USDC via Stellar&apos;s regulated asset infrastructure.
+        </p>
       </main>
     </div>
   );

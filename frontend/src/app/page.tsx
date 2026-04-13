@@ -206,7 +206,7 @@ export default function Home() {
     setIsFunding(true);
 
     const toastId = `fund-${Date.now()}`;
-    const label = agentFunded ? `Top Up: ${budget.dailyLimit} XLM` : `Fund Card: ${budget.dailyLimit} XLM`;
+    const label = agentFunded ? `Top Up: ${budget.dailyLimit} USDC` : `Fund Card: ${budget.dailyLimit} USDC`;
     addToast(toastId, label, 'user');
 
     try {
@@ -576,7 +576,7 @@ export default function Home() {
               id: p.id,
               service: p.service,
               plan: 'on-demand',
-              price: `${p.amount} XLM`,
+              price: `${p.amount} USDC`,
               totalSpent: parseFloat(p.amount) || 0,
               status: p.status === 'settled' ? 'active' : 'expired',
               lastUsed: p.timestamp,

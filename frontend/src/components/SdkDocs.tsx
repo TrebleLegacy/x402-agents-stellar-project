@@ -11,7 +11,7 @@ const x402 = createX402ServerFromEnv();
 
 router.post('/demo/echo', x402.wrapEndpoint({
   price: '0.01',
-  asset: 'XLM',
+  asset: 'USDC',
   description: 'SDK demo endpoint',
   handler: async (req) => ({ success: true, echo: req.body })
 }));

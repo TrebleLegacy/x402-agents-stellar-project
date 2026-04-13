@@ -25,7 +25,7 @@ export default function LandingPage({ onStart }: { onStart: () => void }) {
             The Pre-Paid Card for AI Agents
           </h2>
           <p className="text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
-            Fund an autonomous wallet. Your agent discovers paid APIs, subscribes,
+            Fund an autonomous wallet. Your agent consumes paid APIs, subscribes,
             and pays — all on-chain, all without you signing.
             You just watch the money move.
           </p>
@@ -49,7 +49,7 @@ export default function LandingPage({ onStart }: { onStart: () => void }) {
             </div>
             <h3 className="text-lg font-bold text-white mb-2">1. Fund the Card</h3>
             <p className="text-slate-400 text-sm leading-relaxed">
-              Top up an agent-controlled sub-wallet with XLM from your Freighter wallet.
+              Top up an agent-controlled sub-wallet with USDC from your Freighter wallet.
               The agent gets its own keypair — you stay in control of the budget.
             </p>
           </div>
@@ -96,7 +96,7 @@ export default function LandingPage({ onStart }: { onStart: () => void }) {
                 </div>
                 <div className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg border border-slate-800">
                   <div className="w-7 h-7 rounded-full bg-blue-900/50 flex items-center justify-center text-blue-400 text-xs font-bold">3</div>
-                  <div className="flex-1 text-slate-300">Agent auto-signs XLM payment on Stellar</div>
+                  <div className="flex-1 text-slate-300">Agent auto-signs USDC payment on Stellar</div>
                 </div>
                 <div className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg border border-emerald-800/40">
                   <div className="w-7 h-7 rounded-full bg-emerald-900/50 flex items-center justify-center text-emerald-400 text-xs font-bold">4</div>
@@ -107,25 +107,29 @@ export default function LandingPage({ onStart }: { onStart: () => void }) {
             <div className="flex-1 w-full bg-slate-950 p-6 rounded-2xl border border-slate-800 font-mono text-[11px] text-emerald-300">
               <p className="opacity-50 mb-3">{'// x402 Agent Payment'}</p>
               <pre className="text-slate-300 leading-relaxed">
-{`const card = AgentPay.fund({
-  from: freighterWallet,
-  budget: '10 XLM'
-});
-
-// Agent acts autonomously
-const data = await agent.query(
-  'Get Aave TVL'
+{`// 1. Fund the agent card
+const agent = deriveAgentWallet(
+  freighterPublicKey
 );
+await fundAgent(agent, '10 USDC');
 
-// Under the hood:
-// → 402 received
-// → agent signs payment
+// 2. Agent subscribes to an API
+await x402Client.buildAndSign({
+  source: agent.publicKey,
+  destination: apiProvider,
+  amount: '0.001',
+});
 // → Stellar tx confirmed
-// → data returned`}
+// → API access granted`}
               </pre>
             </div>
           </div>
         </div>
+
+        {/* Testnet disclaimer */}
+        <p className="text-center text-[11px] text-slate-600 mt-10">
+          Demo runs on Stellar Testnet using XLM as a stand-in for USDC. Production uses native USDC via Stellar&apos;s regulated asset infrastructure.
+        </p>
       </main>
     </div>
   );

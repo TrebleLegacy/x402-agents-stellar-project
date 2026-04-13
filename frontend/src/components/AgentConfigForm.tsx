@@ -6,9 +6,9 @@ import { AgentConfig as AgentConfigType } from '@/types/agent';
 import { AGENT_PRESETS } from '@/data/agentPresets';
 
 const QUICK_TEMPLATES = [
-  { id: 'forge-operator', name: 'Autonomous Analyst', icon: '🤖', desc: 'Auto-pays for data it needs', cost: '~0.001–0.003 XLM / query' },
-  { id: 'market-brief',   name: 'Market Brief',       icon: '📊', desc: 'Treasury brief: crypto, FX, macro', cost: '~0.001 XLM / query' },
-  { id: 'quick-scan',     name: 'Security Scanner',    icon: '🔒', desc: 'Smart contract audits', cost: '~0.002 XLM / query' },
+  { id: 'forge-operator', name: 'Autonomous Analyst', icon: '🤖', desc: 'Auto-pays for data it needs', cost: '~0.001–0.003 USDC / query' },
+  { id: 'market-brief',   name: 'Market Brief',       icon: '📊', desc: 'Treasury brief: crypto, FX, macro', cost: '~0.001 USDC / query' },
+  { id: 'quick-scan',     name: 'Security Scanner',    icon: '🔒', desc: 'Smart contract audits', cost: '~0.002 USDC / query' },
 ];
 
 interface AgentConfigProps {

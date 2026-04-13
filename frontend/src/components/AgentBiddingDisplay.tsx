@@ -116,7 +116,7 @@ export default function AgentBiddingDisplay({
                 <div className="flex-shrink-0 text-right">
                   <div className="text-lg font-bold text-emerald-400">
                     {agent.finalPrice.toFixed(4)}
-                    <span className="text-[10px] text-slate-400 ml-0.5">XLM</span>
+                    <span className="text-[10px] text-slate-400 ml-0.5">USDC</span>
                   </div>
                   <p className="text-[10px] text-slate-500">
                     {agent.basePrice.toFixed(4)} base

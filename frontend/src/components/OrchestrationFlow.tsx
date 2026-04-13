@@ -77,7 +77,7 @@ export default function OrchestrationFlow({
         {totalCost !== undefined && (
           <div className="flex items-center gap-1 text-sm">
             <Zap className="w-4 h-4 text-amber-400" />
-            <span className="font-mono text-amber-400">{totalCost.toFixed(4)} XLM</span>
+            <span className="font-mono text-amber-400">{totalCost.toFixed(4)} USDC</span>
           </div>
         )}
       </div>

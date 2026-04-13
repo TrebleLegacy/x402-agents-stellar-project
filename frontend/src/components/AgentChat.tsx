@@ -142,7 +142,7 @@ export default function AgentChat({
     { stage: 4, name: 'Auditor Verification', status: 'completed', detail: 'Reputation checks passed', duration: 142, cost: 0.03 },
     { stage: 5, name: 'Policy Validation', status: 'completed', detail: 'Safety constraints verified', duration: 67, cost: 0 },
     { stage: 6, name: 'Economic Decision', status: 'completed', detail: 'DeFiAnalyzer selected (rank 1)', duration: 156, cost: 0 },
-    { stage: 7, name: 'Budget Verification', status: 'completed', detail: '0.96 XLM remaining', duration: 51, cost: 0 },
+    { stage: 7, name: 'Budget Verification', status: 'completed', detail: '0.96 USDC remaining', duration: 51, cost: 0 },
     { stage: 8, name: 'x402 Payment', status: 'completed', detail: 'Stellar transaction confirmed', duration: 2400, cost: 0.108 },
     { stage: 9, name: 'Agent Execution', status: 'completed', detail: 'DeFiAnalyzer executing task', duration: 3200, cost: 0 },
     { stage: 10, name: 'Output Audit', status: 'completed', detail: 'Result validated, +2 reputation', duration: 487, cost: 0 },
