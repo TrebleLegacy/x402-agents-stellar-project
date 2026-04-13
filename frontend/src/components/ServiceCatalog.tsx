@@ -67,30 +67,10 @@ const API_SERVICES: APIService[] = [
   },
 ];
 
-const AGENT_TEMPLATES = [
-  {
-    id: 'forge-operator',
-    name: 'Autonomous Analyst',
-    description: 'Ask anything — the agent auto-pays for the data it needs.',
-    icon: '🤖',
-  },
-  {
-    id: 'market-brief',
-    name: 'Market Brief',
-    description: 'Daily treasury brief with crypto, FX, and macro signals.',
-    icon: '📊',
-  },
-  {
-    id: 'quick-scan',
-    name: 'Security Scanner',
-    description: 'Run security audits on smart contracts.',
-    icon: '🔒',
-  },
-];
+
 
 interface ServiceCatalogProps {
   onSubscribe: (service: APIService) => Promise<void>;
-  onLaunchAgent: (presetId: string) => void;
   walletConnected: boolean;
   /** Service IDs that are currently subscribed (source of truth from parent) */
   subscribedServiceIds: Set<string>;
@@ -98,7 +78,6 @@ interface ServiceCatalogProps {
 
 export default function ServiceCatalog({
   onSubscribe,
-  onLaunchAgent,
   walletConnected,
   subscribedServiceIds,
 }: ServiceCatalogProps) {
@@ -118,34 +97,10 @@ export default function ServiceCatalog({
       {/* Header */}
       <div className="px-6 py-5 border-b border-slate-800 shrink-0">
         <h1 className="text-xl font-bold text-white tracking-tight">x402 Marketplace</h1>
-        <p className="text-sm text-slate-500 mt-1">Subscribe to paid APIs or launch an agent</p>
+        <p className="text-sm text-slate-500 mt-1">Subscribe to paid API services for your agent</p>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* Agent Templates */}
-        <div className="px-6 py-4">
-          <h2 className="text-[11px] text-slate-500 uppercase tracking-wider font-medium mb-3">Launch an Agent</h2>
-          <div className="grid grid-cols-3 gap-3">
-            {AGENT_TEMPLATES.map((agent) => (
-              <button
-                key={agent.id}
-                onClick={() => onLaunchAgent(agent.id)}
-                disabled={!walletConnected}
-                className="text-left p-4 bg-slate-900/60 rounded-xl border border-slate-800 hover:border-emerald-500/30 hover:bg-slate-800/50 transition-all group disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <div className="text-2xl mb-2">{agent.icon}</div>
-                <h3 className="text-sm font-medium text-white group-hover:text-emerald-400 transition-colors">{agent.name}</h3>
-                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed line-clamp-2">{agent.description}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="px-6">
-          <div className="border-t border-slate-800" />
-        </div>
-
         {/* API Services */}
         <div className="px-6 py-4">
           <h2 className="text-[11px] text-slate-500 uppercase tracking-wider font-medium mb-3">Paid API Services</h2>

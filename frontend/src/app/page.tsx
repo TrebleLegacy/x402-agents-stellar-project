@@ -563,7 +563,6 @@ export default function Home() {
                   payments: [...prev.payments, payment],
                 }));
               }}
-              onLaunchAgent={(presetId: string) => setLoadPresetId(presetId)}
             />
           ) : (
             <div className="flex-1 flex flex-col min-h-0 bg-slate-950">

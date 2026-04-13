@@ -6,9 +6,9 @@ import { AgentConfig as AgentConfigType } from '@/types/agent';
 import { AGENT_PRESETS } from '@/data/agentPresets';
 
 const QUICK_TEMPLATES = [
-  { id: 'forge-operator', name: 'Autonomous Analyst', icon: '🤖', desc: 'Auto-pays for data it needs' },
-  { id: 'market-brief',   name: 'Market Brief',       icon: '📊', desc: 'Treasury brief: crypto, FX, macro' },
-  { id: 'quick-scan',     name: 'Security Scanner',    icon: '🔒', desc: 'Smart contract audits' },
+  { id: 'forge-operator', name: 'Autonomous Analyst', icon: '🤖', desc: 'Auto-pays for data it needs', cost: '~0.001–0.003 XLM / query' },
+  { id: 'market-brief',   name: 'Market Brief',       icon: '📊', desc: 'Treasury brief: crypto, FX, macro', cost: '~0.001 XLM / query' },
+  { id: 'quick-scan',     name: 'Security Scanner',    icon: '🔒', desc: 'Smart contract audits', cost: '~0.002 XLM / query' },
 ];
 
 interface AgentConfigProps {
@@ -86,10 +86,13 @@ export default function AgentConfigForm({
                 }`}
               >
                 <span className="text-xl shrink-0">{t.icon}</span>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className={`text-sm font-medium truncate ${active ? 'text-emerald-300' : 'text-white'}`}>{t.name}</p>
                   <p className="text-[11px] text-slate-500 truncate">{t.desc}</p>
                 </div>
+                <span className={`text-[10px] font-mono shrink-0 px-2 py-0.5 rounded-full ${active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
+                  {t.cost}
+                </span>
               </button>
             );
           })}
