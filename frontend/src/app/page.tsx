@@ -179,10 +179,36 @@ export default function Home() {
 
   const autoMessage = getAutoMessage();
 
+  // ── Poll on-chain balance for agent wallet ───────────────────
+  const fetchAgentBalance = useCallback(async () => {
+    if (!agentWallet) return;
+    try {
+      const res = await fetch(`https://horizon-testnet.stellar.org/accounts/${agentWallet.publicKey}`);
+      if (res.ok) {
+        const data = await res.json();
+        const native = data.balances?.find((b: any) => b.asset_type === 'native');
+        if (native) setOnChainBalance(parseFloat(native.balance));
+      }
+    } catch { /* noop */ }
+  }, [agentWallet]);
+
+  useEffect(() => {
+    if (agentFunded && agentWallet) {
+      fetchAgentBalance();
+      const interval = setInterval(fetchAgentBalance, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [fetchAgentBalance, agentFunded, agentWallet]);
+
   // ── Fund Agent Wallet (standalone, via Freighter) ─────────────
   const handleFundAgent = useCallback(async () => {
     if (!agentWallet || !connectedWallet) return;
     setIsFunding(true);
+
+    const toastId = `fund-${Date.now()}`;
+    const label = agentFunded ? `Top Up: ${budget.dailyLimit} XLM` : `Fund Card: ${budget.dailyLimit} XLM`;
+    addToast(toastId, label);
+
     try {
       const horizonUrl = 'https://horizon-testnet.stellar.org';
       const networkPassphrase = StellarSdk.Networks.TESTNET;
@@ -194,7 +220,6 @@ export default function Home() {
       const account = new StellarSdk.Account(connectedWallet, accData.sequence);
       const fundAmount = String(budget.dailyLimit);
 
-      // Use createAccount for first fund, payment for top-ups
       const operation = agentFunded
         ? StellarSdk.Operation.payment({
             destination: agentWallet.publicKey,
@@ -214,8 +239,10 @@ export default function Home() {
         .setTimeout(60)
         .build();
 
+      updateStep(toastId, 'sign');
       const signedXdr = await freighterSigner(tx.toXDR(), networkPassphrase);
 
+      updateStep(toastId, 'submit');
       const submitRes = await fetch(`${horizonUrl}/transactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -223,41 +250,28 @@ export default function Home() {
       });
 
       if (submitRes.ok) {
+        const result = await submitRes.json();
         setAgentFunded(true);
+        updateStep(toastId, 'confirm', { txHash: result.hash });
+        // Refresh balance after a short delay for ledger close
+        setTimeout(() => fetchAgentBalance(), 2000);
       } else {
         const err = await submitRes.json();
         if (err?.extras?.result_codes?.operations?.includes('op_already_exists')) {
           setAgentFunded(true);
+          updateStep(toastId, 'confirm');
+          setTimeout(() => fetchAgentBalance(), 2000);
         } else {
           throw new Error(err?.extras?.result_codes?.operations?.join(', ') || 'Funding failed');
         }
       }
     } catch (err: any) {
-      alert(`Funding failed: ${err.message}`);
+      updateStep(toastId, 'error', { error: err.message });
     } finally {
       setIsFunding(false);
     }
-  }, [agentWallet, connectedWallet, agentFunded, budget.dailyLimit]);
+  }, [agentWallet, connectedWallet, agentFunded, budget.dailyLimit, addToast, updateStep, fetchAgentBalance]);
 
-  // ── Poll on-chain balance for agent wallet ───────────────────
-  const fetchAgentBalance = useCallback(async () => {
-    if (!agentWallet || !agentFunded) return;
-    try {
-      const res = await fetch(`https://horizon-testnet.stellar.org/accounts/${agentWallet.publicKey}`);
-      if (res.ok) {
-        const data = await res.json();
-        const native = data.balances?.find((b: any) => b.asset_type === 'native');
-        if (native) setOnChainBalance(parseFloat(native.balance));
-      }
-    } catch { /* noop */ }
-  }, [agentWallet, agentFunded]);
-
-  useEffect(() => {
-    fetchAgentBalance();
-    if (!agentFunded || !agentWallet) return;
-    const interval = setInterval(fetchAgentBalance, 15000);
-    return () => clearInterval(interval);
-  }, [fetchAgentBalance, agentFunded, agentWallet]);
 
   // ── Agent config submit (wallet already connected via sidebar) ─
   const handleConfigSubmit = async (config: AgentConfigType) => {
