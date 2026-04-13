@@ -2,10 +2,12 @@
 'use client';
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import * as StellarSdk from '@stellar/stellar-sdk';
 import { Zap, Lock } from 'lucide-react';
 import AgentConfigForm from '@/components/AgentConfigForm';
 import AgentChat from '@/components/AgentChat';
 import ServiceCatalog, { APIService } from '@/components/ServiceCatalog';
+import AgentFundCard from '@/components/AgentFundCard';
 
 import WalletSidebar from '@/components/WalletSidebar';
 import VaultModal from '@/components/VaultModal';
@@ -42,6 +44,9 @@ export default function Home() {
 
   // ── Agent Wallet (auto-sign keypair for autonomous payments) ──
   const [agentWallet, setAgentWallet] = useState<AgentWallet | null>(null);
+  const [agentFunded, setAgentFunded] = useState(false);
+  const [isFunding, setIsFunding] = useState(false);
+  const [onChainBalance, setOnChainBalance] = useState<number | null>(null);
   const [budget, setBudget] = useState<BudgetState>({
     dailyLimit: 10,
     spent: 0,
@@ -82,12 +87,10 @@ export default function Home() {
   const handleWalletConnected = useCallback(async (publicKey: string) => {
     setConnectedWallet(publicKey);
 
-    // Auto-create agent wallet (sub-account for autonomous payments)
+    // Auto-create agent wallet keypair (NOT funded yet — funded on first launch)
     if (!agentWallet) {
       const wallet = generateAgentWallet();
       setAgentWallet(wallet);
-      // Fund via Friendbot on testnet (non-blocking)
-      fetch(`https://friendbot.stellar.org?addr=${wallet.publicKey}`).catch(() => {});
     }
 
     // Save to vault
@@ -109,6 +112,12 @@ export default function Home() {
     setApiClient(null);
     apiClientRef.current = null;
     setSessionId('');
+    setAgentWallet(null);
+    setAgentFunded(false);
+    setOnChainBalance(null);
+    setBudget({ dailyLimit: 10, spent: 0, remaining: 10, payments: [] });
+    setLogEvents([]);
+    setStarted(false);
   }, []);
 
   const handleLockApp = useCallback(async () => {
@@ -119,6 +128,12 @@ export default function Home() {
     setApiClient(null);
     apiClientRef.current = null;
     setSessionId('');
+    setAgentWallet(null);
+    setAgentFunded(false);
+    setOnChainBalance(null);
+    setBudget({ dailyLimit: 10, spent: 0, remaining: 10, payments: [] });
+    setLogEvents([]);
+    setStarted(false);
     setVaultOpen(true);
   }, []);
 
@@ -154,6 +169,66 @@ export default function Home() {
   };
 
   const autoMessage = getAutoMessage();
+
+  // ── Fund Agent Wallet (standalone, via Freighter) ─────────────
+  const handleFundAgent = useCallback(async () => {
+    if (!agentWallet || !connectedWallet) return;
+    setIsFunding(true);
+    try {
+      const horizonUrl = 'https://horizon-testnet.stellar.org';
+      const networkPassphrase = StellarSdk.Networks.TESTNET;
+
+      const accRes = await fetch(`${horizonUrl}/accounts/${connectedWallet}`);
+      if (!accRes.ok) throw new Error('Main wallet not found on testnet. Fund it via Friendbot first.');
+      const accData = await accRes.json();
+
+      const account = new StellarSdk.Account(connectedWallet, accData.sequence);
+      const fundAmount = String(budget.dailyLimit);
+
+      // Use createAccount for first fund, payment for top-ups
+      const operation = agentFunded
+        ? StellarSdk.Operation.payment({
+            destination: agentWallet.publicKey,
+            asset: StellarSdk.Asset.native(),
+            amount: fundAmount,
+          })
+        : StellarSdk.Operation.createAccount({
+            destination: agentWallet.publicKey,
+            startingBalance: fundAmount,
+          });
+
+      const tx = new StellarSdk.TransactionBuilder(account, {
+        fee: StellarSdk.BASE_FEE,
+        networkPassphrase,
+      })
+        .addOperation(operation)
+        .setTimeout(60)
+        .build();
+
+      const signedXdr = await freighterSigner(tx.toXDR(), networkPassphrase);
+
+      const submitRes = await fetch(`${horizonUrl}/transactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `tx=${encodeURIComponent(signedXdr)}`,
+      });
+
+      if (submitRes.ok) {
+        setAgentFunded(true);
+      } else {
+        const err = await submitRes.json();
+        if (err?.extras?.result_codes?.operations?.includes('op_already_exists')) {
+          setAgentFunded(true);
+        } else {
+          throw new Error(err?.extras?.result_codes?.operations?.join(', ') || 'Funding failed');
+        }
+      }
+    } catch (err: any) {
+      alert(`Funding failed: ${err.message}`);
+    } finally {
+      setIsFunding(false);
+    }
+  }, [agentWallet, connectedWallet, agentFunded, budget.dailyLimit]);
 
   // ── Agent config submit (wallet already connected via sidebar) ─
   const handleConfigSubmit = async (config: AgentConfigType) => {
@@ -307,6 +382,23 @@ export default function Home() {
             />
           </div>
 
+          {/* AgentPay Card Fund (right below wallet) */}
+          {connectedWallet && agentWallet && (
+            <AgentFundCard
+              agentPublicKey={agentWallet.publicKey}
+              agentFunded={agentFunded}
+              isFunding={isFunding}
+              budgetLimit={budget.dailyLimit}
+              onBudgetChange={(limit) => setBudget(prev => ({
+                ...prev,
+                dailyLimit: limit,
+                remaining: limit - prev.spent,
+              }))}
+              onFundAgent={handleFundAgent}
+              onBalanceUpdate={setOnChainBalance}
+            />
+          )}
+
           {/* Agent Config or Active Session (bottom) */}
           <div className="flex-1">
             {!agentConfig ? (
@@ -315,13 +407,6 @@ export default function Home() {
                 isLoading={isLoading}
                 walletConnected={!!connectedWallet}
                 loadPresetId={loadPresetId}
-                agentWallet={agentWallet}
-                budgetLimit={budget.dailyLimit}
-                onBudgetChange={(limit) => setBudget(prev => ({
-                  ...prev,
-                  dailyLimit: limit,
-                  remaining: limit - prev.spent,
-                }))}
               />
             ) : (
               <div className="p-5 flex flex-col h-full bg-slate-900/10">
@@ -373,6 +458,12 @@ export default function Home() {
                   .filter(Boolean)
               )}
               onSubscribe={async (service: APIService) => {
+                // Must fund agent card first
+                if (!agentFunded) {
+                  alert('Fund your AgentPay card first (left panel).');
+                  return;
+                }
+
                 const renewDate = new Date();
                 renewDate.setDate(renewDate.getDate() + 30);
                 const paymentId = `sub-${service.id}-${Date.now()}`;
@@ -394,7 +485,6 @@ export default function Home() {
                       price: service.price,
                     }, agentWallet.secretKey);
 
-                    // Submit to Horizon
                     const res = await fetch('https://horizon-testnet.stellar.org/transactions', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -504,6 +594,7 @@ export default function Home() {
             onRenew={() => {}}
             budgetLimit={budget.dailyLimit}
             budgetSpent={budget.spent}
+            onChainBalance={onChainBalance}
             agentPublicKey={agentWallet?.publicKey}
           />
         </div>

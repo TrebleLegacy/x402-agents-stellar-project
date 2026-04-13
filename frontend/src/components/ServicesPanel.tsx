@@ -22,6 +22,7 @@ interface ServicesPanelProps {
   onRenew: (id: string) => void;
   budgetLimit?: number;
   budgetSpent?: number;
+  onChainBalance?: number | null;
   agentPublicKey?: string;
 }
 
@@ -65,13 +66,19 @@ export default function ServicesPanel({
   onRenew,
   budgetLimit = 10,
   budgetSpent = 0,
+  onChainBalance,
   agentPublicKey,
 }: ServicesPanelProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const totalSpent = subscriptions.reduce((sum, s) => sum + s.totalSpent, 0) || budgetSpent;
-  const budgetPercent = budgetLimit > 0 ? Math.min((totalSpent / budgetLimit) * 100, 100) : 0;
-  const budgetRemaining = Math.max(budgetLimit - totalSpent, 0);
+  // Real balance from Horizon, fallback to budget math
+  const cardBalance = onChainBalance ?? Math.max(budgetLimit - budgetSpent, 0);
+
+  // Monthly estimate: sum of all active subscription prices × 30
+  const monthlyEstimate = subscriptions
+    .filter(s => s.status === 'active')
+    .reduce((sum, s) => sum + s.totalSpent * 30, 0);
+
   const cardNumber = agentPublicKey
     ? `${agentPublicKey.slice(0, 4)} ${agentPublicKey.slice(4, 8)} •••• ${agentPublicKey.slice(-4)}`
     : '•••• •••• •••• ••••';
@@ -120,12 +127,14 @@ export default function ServicesPanel({
             <div>
               <p className="text-[9px] text-slate-400 uppercase tracking-wider">Balance</p>
               <p className="text-xl font-bold text-white tabular-nums">
-                {budgetRemaining.toFixed(2)} <span className="text-sm text-slate-400 font-normal">XLM</span>
+                {cardBalance.toFixed(2)} <span className="text-sm text-slate-400 font-normal">XLM</span>
               </p>
             </div>
             <div className="text-right">
-              <p className="text-[9px] text-slate-400 uppercase tracking-wider">Limit</p>
-              <p className="text-sm text-slate-300 tabular-nums">{budgetLimit} XLM / day</p>
+              <p className="text-[9px] text-slate-400 uppercase tracking-wider">Est. Monthly</p>
+              <p className="text-sm text-slate-300 tabular-nums">
+                {monthlyEstimate > 0 ? `${monthlyEstimate.toFixed(3)} XLM` : '—'}
+              </p>
             </div>
           </div>
 
@@ -134,8 +143,8 @@ export default function ServicesPanel({
               <div
                 className="h-full rounded-full transition-all duration-700 ease-out"
                 style={{
-                  width: `${100 - budgetPercent}%`,
-                  background: budgetPercent > 80
+                  width: `${cardBalance > 0 ? Math.min((cardBalance / Math.max(budgetLimit, cardBalance)) * 100, 100) : 0}%`,
+                  background: cardBalance < 2
                     ? 'linear-gradient(90deg, #ef4444, #f59e0b)'
                     : 'linear-gradient(90deg, #34d399, #10b981)',
                 }}
