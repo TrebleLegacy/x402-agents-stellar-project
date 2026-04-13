@@ -283,24 +283,13 @@ export default function Home() {
         onUnlocked={handleVaultUnlocked}
       />
 
-      {/* HEADER */}
-      <header className="border-b border-slate-800 bg-slate-950/95 backdrop-blur-sm shrink-0 h-16">
-        <div className="flex items-center justify-between px-6 h-full">
-          <div className="flex items-center gap-3">
-            <Zap className="w-5 h-5 text-emerald-400" />
-            <h1 className="text-xl font-bold text-white tracking-tight">FORGE</h1>
-            <span className="text-[10px] text-emerald-500/80 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 ml-2 hidden sm:inline-block font-mono">LIVE ESCROW ACTIVE</span>
-          </div>
-          <div className="flex items-center gap-3"></div>
-        </div>
-      </header>
 
       {/* MAIN DASHBOARD */}
       <div className="flex-1 flex overflow-hidden">
         {/* LEFT COLUMN: Wallet Sidebar + Agent Config */}
-        <div className={`${agentConfig ? 'w-[300px]' : 'w-[420px]'} flex flex-col shrink-0 border-r border-slate-800 bg-slate-900/30 overflow-hidden hidden md:flex transition-all duration-300`}>
+        <div className={`${agentConfig ? 'w-[300px]' : 'w-[420px]'} flex flex-col shrink-0 border-r border-slate-800 bg-slate-900/30 overflow-y-auto hidden md:flex transition-all duration-300`}>
           {/* Wallet Sidebar (top) */}
-          <div className={`${agentConfig ? 'h-auto' : 'h-[280px]'} shrink-0 border-b border-slate-800`}>
+          <div className="shrink-0 border-b border-slate-800">
             <WalletSidebar
               onConnected={handleWalletConnected}
               onDisconnected={handleWalletDisconnected}
@@ -310,7 +299,7 @@ export default function Home() {
           </div>
 
           {/* Agent Config or Active Session (bottom) */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1">
             {!agentConfig ? (
               <AgentConfigForm
                 onConfigSubmit={handleConfigSubmit}

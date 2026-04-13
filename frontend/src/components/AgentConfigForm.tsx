@@ -69,7 +69,7 @@ export default function AgentConfigForm({
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 overflow-y-auto">
+    <div className="flex flex-col h-full bg-slate-950">
       <div className="sticky top-0 p-6 border-b border-slate-800 bg-slate-950/95 backdrop-blur-sm">
         <div className="flex items-center gap-2 mb-2">
           <Settings className="w-5 h-5 text-emerald-400" />
