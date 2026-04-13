@@ -1,33 +1,45 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { CheckCircle2, Loader2, ExternalLink, XCircle, X, Bot } from 'lucide-react';
+import { CheckCircle2, Loader2, ExternalLink, XCircle, X, Bot, Wallet } from 'lucide-react';
 
 export type TxStep = 'build' | 'sign' | 'submit' | 'confirm' | 'error';
+
+export type TxMode = 'agent' | 'user';
 
 export interface TxToastData {
   id: string;
   label: string;
   step: TxStep;
+  mode: TxMode;
   txHash?: string;
   error?: string;
 }
 
-const STEP_CONFIG: Record<TxStep, { label: string; icon: React.ReactNode; color: string }> = {
-  build:   { label: 'Agent building transaction',    icon: <Loader2 className="w-4 h-4 animate-spin" />, color: 'text-blue-400' },
-  sign:    { label: 'Agent signing autonomously',    icon: <Loader2 className="w-4 h-4 animate-spin" />, color: 'text-amber-400' },
-  submit:  { label: 'Agent submitting to Stellar',   icon: <Loader2 className="w-4 h-4 animate-spin" />, color: 'text-purple-400' },
-  confirm: { label: 'Confirmed on-chain ✓',           icon: <CheckCircle2 className="w-4 h-4" />,        color: 'text-emerald-400' },
-  error:   { label: 'Transaction failed',             icon: <XCircle className="w-4 h-4" />,             color: 'text-red-400' },
+const AGENT_STEPS: Record<TxStep, string> = {
+  build: 'Agent building transaction',
+  sign: 'Agent signing autonomously',
+  submit: 'Agent submitting to Stellar',
+  confirm: 'Confirmed on-chain ✓',
+  error: 'Transaction failed',
+};
+
+const USER_STEPS: Record<TxStep, string> = {
+  build: 'Building transaction',
+  sign: 'Signing with Freighter',
+  submit: 'Submitting to Stellar',
+  confirm: 'Confirmed on-chain ✓',
+  error: 'Transaction failed',
 };
 
 const ALL_STEPS: TxStep[] = ['build', 'sign', 'submit', 'confirm'];
 
-function StepDot({ step, currentStep }: { step: TxStep; currentStep: TxStep }) {
+function StepDot({ step, currentStep, mode }: { step: TxStep; currentStep: TxStep; mode: TxMode }) {
   const currentIdx = ALL_STEPS.indexOf(currentStep);
   const stepIdx = ALL_STEPS.indexOf(step);
   const isComplete = currentStep === 'confirm' ? true : stepIdx < currentIdx;
   const isCurrent = step === currentStep && currentStep !== 'confirm' && currentStep !== 'error';
+  const labels = mode === 'agent' ? AGENT_STEPS : USER_STEPS;
 
   return (
     <div className="flex items-center gap-1.5">
@@ -41,14 +53,13 @@ function StepDot({ step, currentStep }: { step: TxStep; currentStep: TxStep }) {
         isCurrent ? 'text-amber-400' :
         'text-slate-600'
       }`}>
-        {STEP_CONFIG[step].label}
+        {labels[step]}
       </span>
     </div>
   );
 }
 
 function SingleToast({ toast, onDismiss }: { toast: TxToastData; onDismiss: (id: string) => void }) {
-  const config = STEP_CONFIG[toast.step];
   const explorerUrl = toast.txHash
     ? `https://stellar.expert/explorer/testnet/tx/${toast.txHash}`
     : null;
@@ -61,16 +72,26 @@ function SingleToast({ toast, onDismiss }: { toast: TxToastData; onDismiss: (id:
     }
   }, [toast.step, toast.id, onDismiss]);
 
+  const isAgent = toast.mode === 'agent';
+  const accentColor = isAgent ? 'text-amber-400' : 'text-blue-400';
+  const bgAccent = isAgent ? 'bg-amber-500/20' : 'bg-blue-500/20';
+  const Icon = isAgent ? Bot : Wallet;
+
+  const statusLabel = toast.step === 'confirm'
+    ? (isAgent ? '✓ Agent Completed' : '✓ Transaction Confirmed')
+    : toast.step === 'error'
+    ? 'Error'
+    : (isAgent ? 'Agent Working…' : 'Signing with Freighter…');
+
   return (
     <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/60 rounded-2xl p-5 shadow-2xl shadow-black/50 w-[380px] animate-slide-in">
-      {/* Agent Working Badge */}
       <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
-        <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
-          <Bot className={`w-4.5 h-4.5 ${toast.step === 'confirm' ? 'text-emerald-400' : 'text-amber-400'}`} />
+        <div className={`w-8 h-8 rounded-lg ${bgAccent} flex items-center justify-center`}>
+          <Icon className={`w-4 h-4 ${toast.step === 'confirm' ? 'text-emerald-400' : accentColor}`} />
         </div>
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-amber-400">
-            {toast.step === 'confirm' ? '✓ Agent Completed' : toast.step === 'error' ? 'Agent Error' : 'Agent Working…'}
+          <p className={`text-xs font-bold uppercase tracking-wider ${accentColor}`}>
+            {statusLabel}
           </p>
           <p className="text-[11px] text-slate-400">{toast.label}</p>
         </div>
@@ -86,7 +107,7 @@ function SingleToast({ toast, onDismiss }: { toast: TxToastData; onDismiss: (id:
       {toast.step !== 'error' && (
         <div className="space-y-1.5 mb-3">
           {ALL_STEPS.map(s => (
-            <StepDot key={s} step={s} currentStep={toast.step} />
+            <StepDot key={s} step={s} currentStep={toast.step} mode={toast.mode} />
           ))}
         </div>
       )}
@@ -129,8 +150,8 @@ function SingleToast({ toast, onDismiss }: { toast: TxToastData; onDismiss: (id:
 export function useTxToast() {
   const [toasts, setToasts] = useState<TxToastData[]>([]);
 
-  const addToast = useCallback((id: string, label: string) => {
-    setToasts(prev => [...prev, { id, label, step: 'build' }]);
+  const addToast = useCallback((id: string, label: string, mode: TxMode = 'agent') => {
+    setToasts(prev => [...prev, { id, label, step: 'build', mode }]);
   }, []);
 
   const updateStep = useCallback((id: string, step: TxStep, extra?: { txHash?: string; error?: string }) => {

@@ -207,7 +207,7 @@ export default function Home() {
 
     const toastId = `fund-${Date.now()}`;
     const label = agentFunded ? `Top Up: ${budget.dailyLimit} XLM` : `Fund Card: ${budget.dailyLimit} XLM`;
-    addToast(toastId, label);
+    addToast(toastId, label, 'user');
 
     try {
       const horizonUrl = 'https://horizon-testnet.stellar.org';
@@ -345,6 +345,8 @@ export default function Home() {
     }
 
     setIsLoading(true);
+    const toastId = `chat-${Date.now()}`;
+    addToast(toastId, `Agent processing query`, 'agent');
 
     pushLog({
       at: new Date().toISOString(),
@@ -355,7 +357,10 @@ export default function Home() {
     });
 
     try {
+      updateStep(toastId, 'sign');
       const response = await client.chat(agentConfig, message, sessionId);
+
+      updateStep(toastId, 'submit');
 
       pushLog({
         at: new Date().toISOString(),
@@ -365,8 +370,13 @@ export default function Home() {
         payload: { responseLength: response.response?.length, trace: response.trace?.length },
       });
 
+      // Brief delay so judges see the submit step
+      await new Promise(r => setTimeout(r, 600));
+      updateStep(toastId, 'confirm');
+
       return response;
     } catch (error: any) {
+      updateStep(toastId, 'error', { error: error.message });
       pushLog({
         at: new Date().toISOString(),
         source: 'forge',
@@ -557,30 +567,6 @@ export default function Home() {
             />
           ) : (
             <div className="flex-1 flex flex-col min-h-0 bg-slate-950">
-              <div className="bg-slate-900/80 px-4 py-2 flex items-center justify-between text-[11px] border-b border-slate-800 shrink-0">
-                <div className="flex items-center gap-2">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <span className="text-slate-400 font-medium">AgentPay</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${Math.max(100 - (budget.spent / budget.dailyLimit) * 100, 0)}%`,
-                        background: 'linear-gradient(90deg, #10b981, #34d399)',
-                      }}
-                    />
-                  </div>
-                  <span className="text-slate-500 tabular-nums font-mono">
-                    {(budget.dailyLimit - budget.spent).toFixed(2)} XLM
-                  </span>
-                </div>
-              </div>
-              <div className="flex-1 overflow-hidden flex flex-col relative">
                 <AgentChat
                   sessionId={sessionId}
                   agentName={agentConfig.name}
@@ -592,7 +578,6 @@ export default function Home() {
                   logEvents={logEvents}
                   showInlineLogs={true}
                 />
-              </div>
             </div>
           )}
         </div>
