@@ -2,18 +2,20 @@
 'use client';
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Zap, Lock, Package, Code2, ExternalLink } from 'lucide-react';
+import { Zap, Lock, Package, Code2, ExternalLink, Wallet } from 'lucide-react';
 import AgentConfigForm from '@/components/AgentConfigForm';
 import AgentChat from '@/components/AgentChat';
 import PreMadeAgents from '@/components/PreMadeAgents';
 import WalletSidebar from '@/components/WalletSidebar';
 import VaultModal from '@/components/VaultModal';
 import PaidDataSources from '@/components/PaidDataSources';
+import ServicesPanel, { Subscription } from '@/components/ServicesPanel';
 import { AgentConfig as AgentConfigType, AgentQueryResponse } from '@/types/agent';
-import { AgentAPIClient } from '@/lib/api';
+import { AgentAPIClient, BudgetState, AutoPayment } from '@/lib/api';
 import { InteractionLogEvent } from '@/types/agent';
 import { VaultManager, VaultPayload } from '@/lib/vault';
 import { freighterSigner } from '@/lib/freighter';
+import { generateAgentWallet, agentWalletSigner, AgentWallet } from '@/lib/x402Client';
 import LandingPage from '@/components/LandingPage';
 
 export default function Home() {
@@ -36,6 +38,15 @@ export default function Home() {
 
   // ── Wallet state ──────────────────────────────────────────────
   const [connectedWallet, setConnectedWallet] = useState<string | null>(null);
+
+  // ── Agent Wallet (auto-sign keypair for autonomous payments) ──
+  const [agentWallet, setAgentWallet] = useState<AgentWallet | null>(null);
+  const [budget, setBudget] = useState<BudgetState>({
+    dailyLimit: 10,
+    spent: 0,
+    remaining: 10,
+    payments: [],
+  });
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const apiClientRef = useRef<AgentAPIClient | null>(null);
@@ -146,8 +157,19 @@ export default function Home() {
     try {
       const network = (process.env.NEXT_PUBLIC_STELLAR_NETWORK as 'testnet' | 'mainnet') || 'testnet';
       const client = new AgentAPIClient(apiUrl, network);
-      client.setPublicKey(connectedWallet);
-      client.setSigner(freighterSigner);
+
+      // Use agent wallet (auto-sign, no popup) if available, otherwise Freighter
+      if (agentWallet) {
+        client.setPublicKey(agentWallet.publicKey);
+        client.setSigner(agentWalletSigner(agentWallet.secretKey));
+        client.setBudget(budget);
+        client.setPaymentCallback((updatedBudget, payment) => {
+          setBudget({ ...updatedBudget });
+        });
+      } else {
+        client.setPublicKey(connectedWallet);
+        client.setSigner(freighterSigner);
+      }
       client.setLogger(pushLog);
 
       const session = await client.createSession(config);
@@ -295,6 +317,14 @@ export default function Home() {
                 isLoading={isLoading}
                 walletConnected={!!connectedWallet}
                 loadPresetId={loadPresetId}
+                agentWallet={agentWallet}
+                onAgentWalletCreated={(wallet) => setAgentWallet(wallet)}
+                budgetLimit={budget.dailyLimit}
+                onBudgetChange={(limit) => setBudget(prev => ({
+                  ...prev,
+                  dailyLimit: limit,
+                  remaining: limit - prev.spent,
+                }))}
               />
             ) : (
               <div className="p-5 flex flex-col h-full bg-slate-900/10">
@@ -386,8 +416,8 @@ export default function Home() {
                   : 'text-slate-400 hover:text-slate-300'
               }`}
             >
-              <Lock className="w-4 h-4" />
-              <span>Unified Data</span>
+              <Wallet className="w-4 h-4" />
+              <span>Spending</span>
             </button>
             <button
               onClick={() => setRightPanelTab('templates')}
@@ -411,9 +441,20 @@ export default function Home() {
 
           <div className="flex-1 overflow-y-auto bg-slate-950/80">
             {rightPanelTab === 'datasources' ? (
-              <div className="p-4">
-                <PaidDataSources />
-              </div>
+              <ServicesPanel
+                subscriptions={budget.payments.map((p): Subscription => ({
+                  id: p.id,
+                  service: p.service,
+                  plan: 'on-demand',
+                  price: `${p.amount} XLM`,
+                  totalSpent: parseFloat(p.amount) || 0,
+                  status: p.status === 'settled' ? 'active' : 'expired',
+                  lastUsed: p.timestamp,
+                  txHash: p.txHash,
+                }))}
+                onToggle={() => {}}
+                onRenew={() => {}}
+              />
             ) : (
               <div className="p-4">
                 <PreMadeAgents onLoadPreset={setLoadPresetId} />

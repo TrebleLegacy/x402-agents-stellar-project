@@ -178,7 +178,35 @@ export const x402PaymentMiddleware = (priceMap: Record<string, string>) => {
           mode: 'local-validation',
         };
       }
-      
+      // ── Attempt real on-chain settlement ──────────────────────────
+      // Submit the signed TX to Horizon for a real, verifiable hash.
+      // Falls back to local-only mode if submission fails.
+      if (!req.paymentData?.transactionHash || req.paymentData?.mode?.includes('local')) {
+        try {
+          const { TransactionBuilder: TB } = require('@stellar/stellar-sdk');
+          const { Horizon } = require('@stellar/stellar-sdk');
+          const horizonUrl = x402Config.network === 'stellar:pubnet'
+            ? 'https://horizon.stellar.org'
+            : 'https://horizon-testnet.stellar.org';
+          const server = new Horizon.Server(horizonUrl);
+          const networkPassphrase = x402Config.network === 'stellar:pubnet'
+            ? require('@stellar/stellar-sdk').Networks.PUBLIC
+            : require('@stellar/stellar-sdk').Networks.TESTNET;
+          const txToSubmit = TB.fromXDR(signatureData.transaction, networkPassphrase);
+          const result = await server.submitTransaction(txToSubmit);
+          const realHash = result.hash;
+          logger.info(`On-chain settlement successful: ${realHash}`);
+          req.paymentData = {
+            ...req.paymentData,
+            transactionHash: realHash,
+            mode: 'on-chain',
+          };
+        } catch (submitErr: any) {
+          logger.warn(`On-chain submission failed (non-blocking): ${submitErr?.message || submitErr}`);
+          // Keep the local-validation paymentData — non-blocking for the demo
+        }
+      }
+
       // Add payment response header
       res.setHeader('payment-response', Buffer.from(
         JSON.stringify({

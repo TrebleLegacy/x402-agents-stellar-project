@@ -18,8 +18,44 @@ export interface PaymentSignatureData {
   timestamp: number;
 }
 
+export interface AgentWallet {
+  publicKey: string;
+  secretKey: string;
+}
+
+/**
+ * Generate a fresh Stellar keypair for the agent wallet.
+ * The keypair is ephemeral — store it in the Vault for persistence.
+ */
+export function generateAgentWallet(): AgentWallet {
+  const kp = StellarSdk.Keypair.random();
+  return { publicKey: kp.publicKey(), secretKey: kp.secret() };
+}
+
+/**
+ * Create a TransactionSigner that signs locally with a secret key.
+ * No Freighter popup — for autonomous agent payments within budget.
+ */
+export function agentWalletSigner(secretKey: string) {
+  return async (xdr: string, networkPassphrase: string): Promise<string> => {
+    const tx = StellarSdk.TransactionBuilder.fromXDR(xdr, networkPassphrase);
+    const kp = StellarSdk.Keypair.fromSecret(secretKey);
+    tx.sign(kp);
+    return tx.toXDR();
+  };
+}
+
+// ── Horizon URL by network ──────────────────────────────────────
+function horizonUrl(network: 'testnet' | 'mainnet'): string {
+  return network === 'mainnet'
+    ? 'https://horizon.stellar.org'
+    : 'https://horizon-testnet.stellar.org';
+}
+
 export class X402PaymentClient {
   private network: 'testnet' | 'mainnet';
+  // Local sequence cache: avoids re-fetching from Horizon on every TX
+  private sequenceCache: Map<string, string> = new Map();
 
   constructor(network: 'testnet' | 'mainnet' = 'testnet') {
     this.network = network;
@@ -31,10 +67,50 @@ export class X402PaymentClient {
       : StellarSdk.Networks.PUBLIC;
   }
 
-  buildUnsignedTransaction(props: X402PaymentInput): string {
+  /**
+   * Fetch the real account sequence from Horizon.
+   * Caches locally and increments client-side after each use
+   * to avoid stale-sequence errors on rapid payments.
+   */
+  private async getSequence(publicKey: string): Promise<string> {
+    const cached = this.sequenceCache.get(publicKey);
+    if (cached) {
+      // Increment local cache for the next TX
+      const next = (BigInt(cached) + 1n).toString();
+      this.sequenceCache.set(publicKey, next);
+      return cached;
+    }
+
+    // Fetch from Horizon
+    const url = `${horizonUrl(this.network)}/accounts/${publicKey}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Account ${publicKey} not found on ${this.network} (${res.status})`);
+    }
+    const data = await res.json();
+    const seq = data.sequence as string;
+    // Cache the next sequence (Horizon returns last-used, TX needs last-used)
+    this.sequenceCache.set(publicKey, (BigInt(seq) + 1n).toString());
+    return seq;
+  }
+
+  /** Reset sequence cache (call after tx_bad_seq error) */
+  resetSequenceCache(publicKey?: string): void {
+    if (publicKey) {
+      this.sequenceCache.delete(publicKey);
+    } else {
+      this.sequenceCache.clear();
+    }
+  }
+
+  /**
+   * Build an unsigned payment TX with the REAL account sequence from Horizon.
+   */
+  async buildUnsignedTransaction(props: X402PaymentInput): Promise<string> {
     const { sourcePublicKey, destinationAddress, amount, assetCode, assetIssuer } = props;
 
-    const account = new StellarSdk.Account(sourcePublicKey, '100');
+    const sequence = await this.getSequence(sourcePublicKey);
+    const account = new StellarSdk.Account(sourcePublicKey, sequence);
 
     const transaction = new StellarSdk.TransactionBuilder(account, {
       fee: StellarSdk.BASE_FEE,
@@ -49,7 +125,7 @@ export class X402PaymentClient {
             : StellarSdk.Asset.native(),
         })
       )
-      .setTimeout(30)
+      .setTimeout(60)
       .build();
 
     return transaction.toXDR();
@@ -75,23 +151,24 @@ export class X402PaymentClient {
   buildAndSign(
     props: X402PaymentInput,
     secretKey: string
-  ): PaymentSignatureData {
-    const unsignedXdr = this.buildUnsignedTransaction(props);
-    return this.signTransaction(unsignedXdr, secretKey);
+  ): Promise<PaymentSignatureData> {
+    return this.buildUnsignedTransaction(props).then(unsignedXdr =>
+      this.signTransaction(unsignedXdr, secretKey)
+    );
   }
 
   createPaymentSignatureHeader(data: PaymentSignatureData): string {
     const headerData = JSON.stringify(data);
-    return Buffer.from(headerData).toString('base64');
+    return btoa(headerData);
   }
 
   parsePaymentHeader(headerValue: string): PaymentSignatureData {
-    const decoded = Buffer.from(headerValue, 'base64').toString('utf-8');
+    const decoded = atob(headerValue);
     return JSON.parse(decoded);
   }
 
   parsePaymentResponse(headerValue: string): Record<string, unknown> {
-    const decoded = Buffer.from(headerValue, 'base64').toString('utf-8');
+    const decoded = atob(headerValue);
     return JSON.parse(decoded);
   }
 }

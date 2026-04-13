@@ -8,6 +8,24 @@ import {
   InteractionLogEvent,
 } from '@/types/agent';
 
+/** A single auto-payment record */
+export interface AutoPayment {
+  id: string;
+  service: string;
+  amount: string;
+  txHash?: string;
+  timestamp: string;
+  status: 'settled' | 'failed';
+}
+
+/** Budget state for autonomous payments */
+export interface BudgetState {
+  dailyLimit: number;
+  spent: number;
+  remaining: number;
+  payments: AutoPayment[];
+}
+
 /**
  * Signing function type — allows pluggable signers (Freighter, raw keypair, etc.)
  * Takes unsigned XDR + network passphrase, returns signed XDR.
@@ -20,6 +38,8 @@ export class AgentAPIClient {
   private publicKey: string | null = null;
   private signer: TransactionSigner | null = null;
   private onLog?: (event: InteractionLogEvent) => void;
+  private budget: BudgetState | null = null;
+  private onPaymentMade?: (budget: BudgetState, payment: AutoPayment) => void;
 
   constructor(baseURL: string, network: 'testnet' | 'mainnet' = 'testnet') {
     this.client = axios.create({
@@ -27,6 +47,16 @@ export class AgentAPIClient {
       headers: { 'Content-Type': 'application/json' },
     });
     this.paymentClient = new X402PaymentClient(network);
+  }
+
+  /** Set the budget for autonomous payments */
+  setBudget(budget: BudgetState): void {
+    this.budget = budget;
+  }
+
+  /** Callback fired after each auto-payment for UI updates */
+  setPaymentCallback(cb: (budget: BudgetState, payment: AutoPayment) => void): void {
+    this.onPaymentMade = cb;
   }
 
   /** Set the connected wallet's public key (from Freighter) */
@@ -67,8 +97,18 @@ export class AgentAPIClient {
       throw new Error('Wallet not connected. Call setPublicKey + setSigner first.');
     }
 
-    // Build unsigned transaction
-    const unsignedXdr = this.paymentClient.buildUnsignedTransaction({
+    // Budget check: reject if over limit
+    const amountNum = parseFloat(amount) || 0;
+    if (this.budget) {
+      if (amountNum > this.budget.remaining) {
+        throw new Error(
+          `Budget exceeded. Payment: ${amount} XLM, remaining: ${this.budget.remaining.toFixed(4)} XLM`
+        );
+      }
+    }
+
+    // Build unsigned transaction (async — fetches real sequence from Horizon)
+    const unsignedXdr = await this.paymentClient.buildUnsignedTransaction({
       sourcePublicKey: this.publicKey,
       receiveSigningPublicKey: destination,
       destinationAddress: destination,
@@ -77,7 +117,7 @@ export class AgentAPIClient {
       price,
     });
 
-    // Sign via the pluggable signer (Freighter popup, or raw keypair)
+    // Sign via the pluggable signer (agent wallet auto-sign, or Freighter popup)
     const signedXdr = await this.signer(unsignedXdr, this.paymentClient.getNetworkPassphrase());
 
     const signatureData: PaymentSignatureData = {
@@ -88,6 +128,27 @@ export class AgentAPIClient {
     };
 
     return this.paymentClient.createPaymentSignatureHeader(signatureData);
+  }
+
+  /** Track an auto-payment in the budget and notify UI */
+  private trackPayment(amount: string, txHash?: string): void {
+    if (!this.budget) return;
+
+    const payment: AutoPayment = {
+      id: `pay-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      service: 'Agent API call',
+      amount,
+      txHash,
+      timestamp: new Date().toISOString(),
+      status: txHash ? 'settled' : 'failed',
+    };
+
+    const amountNum = parseFloat(amount) || 0;
+    this.budget.spent += amountNum;
+    this.budget.remaining = Math.max(0, this.budget.dailyLimit - this.budget.spent);
+    this.budget.payments.push(payment);
+
+    this.onPaymentMade?.(this.budget, payment);
   }
 
   // ── Response normalization ────────────────────────────────────
@@ -294,6 +355,10 @@ export class AgentAPIClient {
             ? this.paymentClient.parsePaymentResponse(paymentResponseHeader)
             : undefined;
 
+          // Track the auto-payment in budget
+          const txHash = (paymentResponse?.hash as string) || undefined;
+          this.trackPayment(amount, txHash);
+
           trace.push({
             at: new Date().toISOString(),
             stage: 'payment_retry_succeeded',
@@ -304,7 +369,7 @@ export class AgentAPIClient {
             at: new Date().toISOString(),
             source: 'agent',
             stage: 'payment_retry_succeeded',
-            detail: 'Payment accepted by agent',
+            detail: `Auto-payment settled: ${amount} XLM${txHash ? ` (tx: ${txHash.slice(0, 8)}...)` : ''}`,
             payload: paymentResponse,
           });
 

@@ -142,7 +142,7 @@ export class X402SdkClient {
     });
 
     const priceInfo = this.normalizePrice(instructions.price, instructions.asset);
-    const signatureData = this.paymentClient.buildAndSign(
+    const signatureData = await this.paymentClient.buildAndSign(
       {
         sourcePublicKey: this.wallet.publicKey,
         receiveSigningPublicKey: instructions.payTo,

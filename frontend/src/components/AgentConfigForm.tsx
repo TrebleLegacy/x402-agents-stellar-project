@@ -1,15 +1,20 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Settings } from 'lucide-react';
+import { Settings, Shield, Wallet } from 'lucide-react';
 import { AgentConfig as AgentConfigType } from '@/types/agent';
 import { AGENT_PRESETS } from '@/data/agentPresets';
+import { generateAgentWallet, AgentWallet } from '@/lib/x402Client';
 
 interface AgentConfigProps {
   onConfigSubmit: (config: AgentConfigType) => void;
   isLoading: boolean;
   walletConnected: boolean;
   loadPresetId?: string | null;
+  agentWallet?: AgentWallet | null;
+  onAgentWalletCreated?: (wallet: AgentWallet) => void;
+  budgetLimit?: number;
+  onBudgetChange?: (limit: number) => void;
 }
 
 export default function AgentConfigForm({
@@ -17,6 +22,10 @@ export default function AgentConfigForm({
   isLoading,
   walletConnected,
   loadPresetId,
+  agentWallet,
+  onAgentWalletCreated,
+  budgetLimit = 10,
+  onBudgetChange,
 }: AgentConfigProps) {
   const [config, setConfig] = useState<AgentConfigType>({
     name: '',
@@ -160,6 +169,59 @@ export default function AgentConfigForm({
             }
             className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-emerald-500 focus:outline-none transition-colors"
           />
+        </div>
+
+        {/* Agent Wallet Section */}
+        <div className="space-y-3 p-4 bg-slate-900/60 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-2 mb-1">
+            <Shield className="w-4 h-4 text-emerald-400" />
+            <h3 className="text-sm font-semibold text-slate-200">Agent Wallet</h3>
+          </div>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Auto-sign payments without Freighter popups. Funds stay within your budget.
+          </p>
+
+          {agentWallet ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs text-emerald-400 font-mono">
+                  {agentWallet.publicKey.slice(0, 8)}...{agentWallet.publicKey.slice(-4)}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs text-slate-400">Daily Budget (XLM)</label>
+                <input
+                  type="number"
+                  min="0.1"
+                  max="1000"
+                  step="0.5"
+                  value={budgetLimit}
+                  onChange={(e) => onBudgetChange?.(parseFloat(e.target.value) || 10)}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-sm focus:border-emerald-500 focus:outline-none transition-colors"
+                />
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={async () => {
+                const wallet = generateAgentWallet();
+                onAgentWalletCreated?.(wallet);
+                // Auto-fund via Friendbot on testnet
+                try {
+                  await fetch(`https://friendbot.stellar.org?addr=${wallet.publicKey}`);
+                } catch {
+                  // Non-blocking — wallet is created even if Friendbot fails
+                }
+              }}
+              disabled={!walletConnected}
+              className="w-full px-3 py-2.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-400 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Wallet className="w-4 h-4" />
+              Create Agent Wallet
+            </button>
+          )}
         </div>
 
         {!walletConnected && (
