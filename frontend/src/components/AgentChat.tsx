@@ -79,12 +79,21 @@ export default function AgentChat({
     setMessages(prevMessages => {
       const newMessages = typeof updater === 'function' ? updater(prevMessages) : updater;
       messagesRefForDirectUpdate.current = newMessages;
-      console.log('[setMessagesWithRef] Updated messages ref and state', {
+      
+      // Log all message updates
+      const assistantMessages = newMessages.filter(m => m.role === 'assistant');
+      const lastAssistant = assistantMessages[assistantMessages.length - 1];
+      
+      console.log('[setMessagesWithRef] Messages updated', {
         totalMessages: newMessages.length,
+        totalAssistantMessages: assistantMessages.length,
+        lastAssistantContent: lastAssistant?.content?.slice(0, 100) || 'EMPTY',
+        lastAssistantId: lastAssistant?.id || 'NO_ID',
         forceCounter: forceUpdateCounter
       });
       return newMessages;
     });
+    // CRITICAL: Always increment force counter to guarantee re-render
     setForceUpdateCounter(c => c + 1);
   };
 
@@ -445,6 +454,15 @@ export default function AgentChat({
     onAutoMessageSent?.();
     submitMessage(autoMessage);
   }, [autoMessage, isLoading, isPaying, messages.length, onAutoMessageSent, sessionId]);
+
+  // Cleanup function to clear any pending timeouts on unmount
+  useEffect(() => {
+    return () => {
+      console.log('[AgentChat unmount] Clearing placeholder timeouts');
+      placeholderTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
+      placeholderTimeoutsRef.current.clear();
+    };
+  }, []);
 
   return (
     <div className="flex flex-col h-full bg-slate-950">
