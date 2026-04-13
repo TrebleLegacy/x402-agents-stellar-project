@@ -2,13 +2,14 @@
 'use client';
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Zap, Lock, Package, Code2, ExternalLink, Wallet } from 'lucide-react';
+import { Zap, Lock } from 'lucide-react';
 import AgentConfigForm from '@/components/AgentConfigForm';
 import AgentChat from '@/components/AgentChat';
-import PreMadeAgents from '@/components/PreMadeAgents';
+import ServiceCatalog, { APIService } from '@/components/ServiceCatalog';
+
 import WalletSidebar from '@/components/WalletSidebar';
 import VaultModal from '@/components/VaultModal';
-import PaidDataSources from '@/components/PaidDataSources';
+
 import ServicesPanel, { Subscription } from '@/components/ServicesPanel';
 import { AgentConfig as AgentConfigType, AgentQueryResponse } from '@/types/agent';
 import { AgentAPIClient, BudgetState, AutoPayment } from '@/lib/api';
@@ -28,7 +29,7 @@ export default function Home() {
   const [apiClient, setApiClient] = useState<AgentAPIClient | null>(null);
   const [logEvents, setLogEvents] = useState<InteractionLogEvent[]>([]);
   const [autoMessageSessionId, setAutoMessageSessionId] = useState<string | null>(null);
-  const [rightPanelTab, setRightPanelTab] = useState<'templates' | 'datasources'>('datasources');
+
   const [loadPresetId, setLoadPresetId] = useState<string | null>(null);
 
   // ── Vault state ───────────────────────────────────────────────
@@ -360,28 +361,48 @@ export default function Home() {
         {/* MIDDLE COLUMN: Chat UI */}
         <div className="flex-1 flex flex-col min-w-0 bg-slate-950 relative border-r border-slate-800">
           {!agentConfig ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 opacity-90 text-center">
-              <div className="max-w-md space-y-6">
-                <div className="w-20 h-20 bg-slate-900 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-slate-800 shadow-2xl">
-                  <Zap className="w-10 h-10 text-slate-400" />
-                </div>
-                <h2 className="text-3xl font-bold text-white tracking-tight">System Offline</h2>
-                <p className="text-slate-400 text-sm leading-relaxed">
-                  {!connectedWallet
-                    ? 'Connect your Freighter wallet and configure an agent to start.'
-                    : 'Configure an agent in the left panel to boot the command center.'}
-                </p>
-              </div>
-            </div>
+            <ServiceCatalog
+              walletConnected={!!connectedWallet}
+              onSubscribe={(service: APIService) => {
+                const payment: AutoPayment = {
+                  id: `sub-${service.id}-${Date.now()}`,
+                  service: service.name,
+                  amount: String(service.priceXLM),
+                  status: 'settled',
+                  timestamp: new Date().toISOString(),
+                  txHash: undefined,
+                };
+                setBudget(prev => ({
+                  ...prev,
+                  spent: prev.spent + service.priceXLM,
+                  payments: [...prev.payments, payment],
+                }));
+              }}
+              onLaunchAgent={(presetId: string) => setLoadPresetId(presetId)}
+            />
           ) : (
             <div className="flex-1 flex flex-col min-h-0 bg-slate-950">
-              <div className="bg-emerald-500/5 text-emerald-200/90 px-4 py-2 flex items-center justify-between text-[11px] uppercase font-mono tracking-widest border-b border-emerald-500/10 shrink-0">
+              <div className="bg-slate-900/80 px-4 py-2 flex items-center justify-between text-[11px] border-b border-slate-800 shrink-0">
                 <div className="flex items-center gap-2">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
-                  <span>Trustless Escrow Module Online</span>
+                  <span className="text-slate-400 font-medium">AgentPay</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.max(100 - (budget.spent / budget.dailyLimit) * 100, 0)}%`,
+                        background: 'linear-gradient(90deg, #10b981, #34d399)',
+                      }}
+                    />
+                  </div>
+                  <span className="text-slate-500 tabular-nums font-mono">
+                    {(budget.dailyLimit - budget.spent).toFixed(2)} XLM
+                  </span>
                 </div>
               </div>
               <div className="flex-1 overflow-hidden flex flex-col relative">
@@ -401,64 +422,25 @@ export default function Home() {
           )}
         </div>
 
-        {/* RIGHT COLUMN: Templates & Paid Data Sources */}
-        <div className="w-[420px] shrink-0 bg-slate-900 hidden lg:flex flex-col relative border-l border-slate-800">
-          <div className="flex border-b border-slate-800 bg-slate-900/50">
-            <button
-              onClick={() => setRightPanelTab('datasources')}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
-                rightPanelTab === 'datasources'
-                  ? 'border-b-2 border-emerald-500 text-emerald-400 bg-slate-800/50'
-                  : 'text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              <Wallet className="w-4 h-4" />
-              <span>Spending</span>
-            </button>
-            <button
-              onClick={() => setRightPanelTab('templates')}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
-                rightPanelTab === 'templates'
-                  ? 'border-b-2 border-emerald-500 text-emerald-400 bg-slate-800/50'
-                  : 'text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <span>Actors</span>
-            </button>
-            <button
-              onClick={() => window.open('/sdk', '_blank')}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors text-slate-400 hover:text-emerald-400 hover:bg-slate-800/50"
-            >
-              <Code2 className="w-4 h-4" />
-              <ExternalLink className="w-3 h-3" />
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto bg-slate-950/80">
-            {rightPanelTab === 'datasources' ? (
-              <ServicesPanel
-                subscriptions={budget.payments.map((p): Subscription => ({
-                  id: p.id,
-                  service: p.service,
-                  plan: 'on-demand',
-                  price: `${p.amount} XLM`,
-                  totalSpent: parseFloat(p.amount) || 0,
-                  status: p.status === 'settled' ? 'active' : 'expired',
-                  lastUsed: p.timestamp,
-                  txHash: p.txHash,
-                }))}
-                onToggle={() => {}}
-                onRenew={() => {}}
-                budgetLimit={budget.dailyLimit}
-                budgetSpent={budget.spent}
-              />
-            ) : (
-              <div className="p-4">
-                <PreMadeAgents onLoadPreset={setLoadPresetId} />
-              </div>
-            )}
-          </div>
+        {/* RIGHT COLUMN: Agent Debit Card */}
+        <div className="w-[380px] shrink-0 bg-slate-950 hidden lg:flex flex-col relative border-l border-slate-800">
+          <ServicesPanel
+            subscriptions={budget.payments.map((p): Subscription => ({
+              id: p.id,
+              service: p.service,
+              plan: 'on-demand',
+              price: `${p.amount} XLM`,
+              totalSpent: parseFloat(p.amount) || 0,
+              status: p.status === 'settled' ? 'active' : 'expired',
+              lastUsed: p.timestamp,
+              txHash: p.txHash,
+            }))}
+            onToggle={() => {}}
+            onRenew={() => {}}
+            budgetLimit={budget.dailyLimit}
+            budgetSpent={budget.spent}
+            agentPublicKey={agentWallet?.publicKey}
+          />
         </div>
       </div>
     </div>
