@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ExternalLink, CreditCard, X, Wifi } from 'lucide-react';
+import { ExternalLink, CreditCard, X, Wifi, Loader2, Plus } from 'lucide-react';
 
 export interface Subscription {
   id: string;
@@ -24,6 +24,10 @@ interface ServicesPanelProps {
   budgetSpent?: number;
   onChainBalance?: number | null;
   agentPublicKey?: string;
+  agentFunded?: boolean;
+  isFunding?: boolean;
+  onBudgetChange?: (limit: number) => void;
+  onFundAgent?: () => void;
 }
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -68,11 +72,15 @@ export default function ServicesPanel({
   budgetSpent = 0,
   onChainBalance,
   agentPublicKey,
+  agentFunded = false,
+  isFunding = false,
+  onBudgetChange,
+  onFundAgent,
 }: ServicesPanelProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Real balance from Horizon, fallback to budget math
-  const cardBalance = onChainBalance ?? Math.max(budgetLimit - budgetSpent, 0);
+  // Real balance from Horizon, default to 0 when not yet fetched
+  const cardBalance = onChainBalance ?? 0;
 
   // Monthly estimate: sum of all active subscription prices × 30
   const monthlyEstimate = subscriptions
@@ -153,6 +161,43 @@ export default function ServicesPanel({
           </div>
         </div>
       </div>
+
+      {/* ── Fund / Top Up Controls ─────────────────────── */}
+      {agentPublicKey && (
+        <div className="px-5 pb-4">
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <input
+                type="number"
+                min="1"
+                max="1000"
+                step="1"
+                value={budgetLimit}
+                onChange={(e) => onBudgetChange?.(parseFloat(e.target.value) || 10)}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white text-sm focus:border-emerald-500 focus:outline-none transition-colors"
+                placeholder="Amount (XLM)"
+              />
+            </div>
+            <button
+              onClick={onFundAgent}
+              disabled={isFunding}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap ${
+                agentFunded
+                  ? 'bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300'
+                  : 'bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-400'
+              }`}
+            >
+              {isFunding ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Signing...</>
+              ) : agentFunded ? (
+                <><Plus className="w-3.5 h-3.5" /> Top Up</>
+              ) : (
+                <><CreditCard className="w-3.5 h-3.5" /> Fund Card</>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Active Subscriptions ────────────────────────── */}
       <div className="px-5 py-2 flex items-center justify-between">

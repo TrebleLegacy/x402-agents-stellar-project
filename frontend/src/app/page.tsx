@@ -8,6 +8,7 @@ import AgentConfigForm from '@/components/AgentConfigForm';
 import AgentChat from '@/components/AgentChat';
 import ServiceCatalog, { APIService } from '@/components/ServiceCatalog';
 import AgentFundCard from '@/components/AgentFundCard';
+import TransactionToast, { useTxToast } from '@/components/TransactionToast';
 
 import WalletSidebar from '@/components/WalletSidebar';
 import VaultModal from '@/components/VaultModal';
@@ -30,6 +31,9 @@ export default function Home() {
   const [agentConfig, setAgentConfig] = useState<AgentConfigType | null>(null);
   const [apiClient, setApiClient] = useState<AgentAPIClient | null>(null);
   const [logEvents, setLogEvents] = useState<InteractionLogEvent[]>([]);
+
+  // ── Transaction toast (agent signing pipeline) ─────────────
+  const { toasts, addToast, updateStep, dismiss } = useTxToast();
   const [autoMessageSessionId, setAutoMessageSessionId] = useState<string | null>(null);
 
   const [loadPresetId, setLoadPresetId] = useState<string | null>(null);
@@ -235,6 +239,26 @@ export default function Home() {
     }
   }, [agentWallet, connectedWallet, agentFunded, budget.dailyLimit]);
 
+  // ── Poll on-chain balance for agent wallet ───────────────────
+  const fetchAgentBalance = useCallback(async () => {
+    if (!agentWallet || !agentFunded) return;
+    try {
+      const res = await fetch(`https://horizon-testnet.stellar.org/accounts/${agentWallet.publicKey}`);
+      if (res.ok) {
+        const data = await res.json();
+        const native = data.balances?.find((b: any) => b.asset_type === 'native');
+        if (native) setOnChainBalance(parseFloat(native.balance));
+      }
+    } catch { /* noop */ }
+  }, [agentWallet, agentFunded]);
+
+  useEffect(() => {
+    fetchAgentBalance();
+    if (!agentFunded || !agentWallet) return;
+    const interval = setInterval(fetchAgentBalance, 15000);
+    return () => clearInterval(interval);
+  }, [fetchAgentBalance, agentFunded, agentWallet]);
+
   // ── Agent config submit (wallet already connected via sidebar) ─
   const handleConfigSubmit = async (config: AgentConfigType) => {
     if (!connectedWallet) {
@@ -387,23 +411,6 @@ export default function Home() {
             />
           </div>
 
-          {/* AgentPay Card Fund (right below wallet) */}
-          {connectedWallet && agentWallet && (
-            <AgentFundCard
-              agentPublicKey={agentWallet.publicKey}
-              agentFunded={agentFunded}
-              isFunding={isFunding}
-              budgetLimit={budget.dailyLimit}
-              onBudgetChange={(limit) => setBudget(prev => ({
-                ...prev,
-                dailyLimit: limit,
-                remaining: limit - prev.spent,
-              }))}
-              onFundAgent={handleFundAgent}
-              onBalanceUpdate={setOnChainBalance}
-            />
-          )}
-
           {/* Agent Config or Active Session (bottom) */}
           <div className="flex-1">
             {!agentConfig ? (
@@ -463,24 +470,30 @@ export default function Home() {
                   .filter(Boolean)
               )}
               onSubscribe={async (service: APIService) => {
-                // Must fund agent card first
                 if (!agentFunded) {
                   alert('Fund your AgentPay card first (left panel).');
                   return;
                 }
 
+                const toastId = `sub-${service.id}-${Date.now()}`;
+                addToast(toastId, `Subscribe: ${service.name}`);
+
                 const renewDate = new Date();
                 renewDate.setDate(renewDate.getDate() + 30);
-                const paymentId = `sub-${service.id}-${Date.now()}`;
+                const paymentId = toastId;
                 let txHash: string | undefined;
 
-                // Real on-chain payment via agent wallet
                 if (agentWallet) {
                   try {
+                    // Step 1: Build
+                    await new Promise(r => setTimeout(r, 400));
+                    updateStep(toastId, 'sign');
+
+                    // Step 2: Agent sign
                     const { X402PaymentClient } = await import('@/lib/x402Client');
                     const client = new X402PaymentClient('testnet');
                     const serverAddr = process.env.NEXT_PUBLIC_SERVER_STELLAR_ADDRESS
-                      || 'GCBGKJHXWPHFRDHM32ZBGV74YQ75BXLKHCS7NBO2PYMPKYJE32U7ILAS';
+                      || connectedWallet || '';
                     const signed = await client.buildAndSign({
                       sourcePublicKey: agentWallet.publicKey,
                       receiveSigningPublicKey: serverAddr,
@@ -489,7 +502,10 @@ export default function Home() {
                       assetContract: '',
                       price: service.price,
                     }, agentWallet.secretKey);
+                    await new Promise(r => setTimeout(r, 300));
+                    updateStep(toastId, 'submit');
 
+                    // Step 3: Submit to Horizon
                     const res = await fetch('https://horizon-testnet.stellar.org/transactions', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -498,9 +514,13 @@ export default function Home() {
                     if (res.ok) {
                       const result = await res.json();
                       txHash = result.hash;
+                      updateStep(toastId, 'confirm', { txHash });
+                    } else {
+                      const err = await res.json().catch(() => ({}));
+                      updateStep(toastId, 'error', { error: err?.extras?.result_codes?.operations?.join(', ') || 'Submission failed' });
                     }
-                  } catch (err) {
-                    console.warn('On-chain subscription payment failed (non-blocking):', err);
+                  } catch (err: any) {
+                    updateStep(toastId, 'error', { error: err.message });
                   }
                 }
 
@@ -508,7 +528,7 @@ export default function Home() {
                   id: paymentId,
                   service: service.name,
                   amount: String(service.priceXLM),
-                  status: 'settled',
+                  status: txHash ? 'settled' : 'failed',
                   timestamp: new Date().toISOString(),
                   txHash,
                   renewsAt: renewDate.toISOString(),
@@ -601,9 +621,20 @@ export default function Home() {
             budgetSpent={budget.spent}
             onChainBalance={onChainBalance}
             agentPublicKey={agentWallet?.publicKey}
+            agentFunded={agentFunded}
+            isFunding={isFunding}
+            onBudgetChange={(limit) => setBudget(prev => ({
+              ...prev,
+              dailyLimit: limit,
+              remaining: limit - prev.spent,
+            }))}
+            onFundAgent={handleFundAgent}
           />
         </div>
       </div>
+
+      {/* Transaction Toasts */}
+      <TransactionToast toasts={toasts} onDismiss={dismiss} />
     </div>
   );
 }
