@@ -131,11 +131,7 @@ router.post(["/chat", "/query"], requirePayment as any, async (req: Request, res
       },
     };
 
-    logger.info(`[Routes] Sending response payload:`, {
-      messageLength: finalResponseMessage.length,
-      hasResponseMessage: !!responsePayload.response.message,
-      payloadKeys: Object.keys(responsePayload),
-    });
+    logger.info(`[Routes] Sending response payload: messageLength=${finalResponseMessage.length}, keys=${Object.keys(responsePayload).join(',')}`);
 
     return res.json(responsePayload);
 

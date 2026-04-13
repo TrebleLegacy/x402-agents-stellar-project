@@ -1,5 +1,5 @@
 /**
- * Freighter Wallet Integration
+ * Freighter Wallet Integration (v6.x)
  *
  * Thin wrapper around @stellar/freighter-api for wallet connection
  * and transaction signing. Used as the pluggable signer for x402 payments.
@@ -7,6 +7,7 @@
 
 import {
   isConnected,
+  requestAccess,
   getAddress,
   signTransaction,
 } from '@stellar/freighter-api';
@@ -21,7 +22,11 @@ export async function isFreighterAvailable(): Promise<boolean> {
   }
 }
 
-/** Connect to Freighter and get the user's public key */
+/**
+ * Connect to Freighter and get the user's public key.
+ * Uses requestAccess() which prompts the user to authorize the app
+ * on first use, and returns the key immediately on subsequent uses.
+ */
 export async function connectFreighter(): Promise<string> {
   const connected = await isConnected();
   if (!connected.isConnected) {
@@ -30,20 +35,36 @@ export async function connectFreighter(): Promise<string> {
     );
   }
 
-  const result = await getAddress();
+  // requestAccess prompts the Freighter popup for authorization
+  const result = await requestAccess();
+
   if (result.error) {
     throw new Error(result.error);
   }
+
+  if (!result.address) {
+    throw new Error('No address returned from Freighter. User may have denied access.');
+  }
+
   return result.address;
+}
+
+/**
+ * Get the currently connected address without prompting.
+ * Returns null if not previously authorized.
+ */
+export async function getFreighterAddress(): Promise<string | null> {
+  try {
+    const result = await getAddress();
+    return result.address || null;
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Sign a transaction XDR using Freighter.
  * This is the TransactionSigner compatible function used by AgentAPIClient.
- *
- * @param xdr - Unsigned transaction XDR (base64)
- * @param networkPassphrase - Stellar network passphrase
- * @returns Signed transaction XDR
  */
 export async function freighterSigner(
   xdr: string,
